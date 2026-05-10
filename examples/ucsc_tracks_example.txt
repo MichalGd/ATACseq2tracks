@@ -1,0 +1,4 @@
+# Example command for generating UCSC tracks after BigWig files are hosted.
+# Replace the URL with the public location of your BigWig files.
+
+../scripts/create_ucsc_tracks.1.0.sh   /data/project/fastq2tracks_human   https://your.server.example.org/project/bigwig

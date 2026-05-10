@@ -1,0 +1,50 @@
+fastq2tracks-github-ready-v2/
+├── docs/
+│   ├── schematics/
+│   │   ├── workflow_schematic.mmd
+│   │   └── workflow_schematic.svg
+│   ├── GITHUB_UPLOAD.md
+│   ├── INSTALLATION.md
+│   ├── KNOWN_ISSUES.md
+│   ├── OUTPUTS.md
+│   ├── PRESENTATION_TEXT_EXTRACT.md
+│   ├── REPORTING_AND_QC.md
+│   ├── SCRIPTS.md
+│   ├── USAGE.md
+│   └── WORKFLOW.md
+├── examples/
+│   ├── run_human_example.sh
+│   ├── run_mouse_example.sh
+│   ├── run_reports_example.sh
+│   └── ucsc_tracks_example.txt
+├── presentations/
+│   └── fastq2tracks_LAbMeeting_29jan2026.pptx
+├── scripts/
+│   ├── bowtie2_dovetail_pairedEnd_Hsapiens.2.1.sh
+│   ├── bowtie2_dovetail_pairedEnd_MMusculus.2.1.sh
+│   ├── bowtie2_human_batch.2.1.sh
+│   ├── bowtie2_mouse_batch.2.1.sh
+│   ├── create_ucsc_tracks.1.0.sh
+│   ├── fastq2tracks.2.1.sh
+│   ├── fastq2tracks.2.1_blocked.sh
+│   ├── fastqc_batch.1.0.sh
+│   ├── generate_multiqc_unified_report.1.0.sh
+│   ├── generate_pipeline_report.1.0.sh
+│   ├── genomecoverage_batch.1.0.sh
+│   ├── genomeCoverage_DNA_human.1.0.sh
+│   ├── genomeCoverage_DNA_mouse.1.0.sh
+│   ├── picard_deduplication.2.1.sh
+│   ├── picard_deduplication_batch.2.1.sh
+│   ├── readme.2.1.sh
+│   └── trimgalore_batch.1.0.sh
+├── tests/
+│   └── check_bash_syntax.sh
+├── .gitattributes
+├── .gitignore
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── MANIFEST.sha256
+├── README.md
+├── SCRIPT_CONTENT_VERIFICATION.txt
+├── SCRIPT_INVENTORY.tsv
+└── SCRIPT_SYNTAX_CHECK.txt

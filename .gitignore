@@ -1,0 +1,45 @@
+# Raw and intermediate sequencing data
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+*.sam
+*.bam
+*.bai
+*.bedGraph
+*.bedGraph.gz
+*.bw
+*.bigwig
+*.chrom.sizes
+
+# Pipeline output folders
+fastQC/
+multiQC/
+trimmedFastq/
+bams/
+dedupBams/
+bedGraph/
+NormBedGraph/
+bigwig/
+reports/
+*_batch_logs_*/
+individual_jobs/
+
+# Logs and runtime files
+*.log
+*.pid
+*.tmp
+nohup.out
+
+# R and report scratch files
+.Rhistory
+.RData
+.Rproj.user/
+*_files/
+*.tex
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+*.swp
+*~

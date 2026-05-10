@@ -1,0 +1,28 @@
+flowchart LR
+    A[Raw paired-end FASTQ<br/>Illumina NovaSeq X Plus] --> B[FastQC raw reads]
+    B --> C[MultiQC raw-read summary]
+    A --> D[Trim Galore<br/>adapter and quality trimming]
+    D --> E[Trimmed paired FASTQ]
+    E --> F[FastQC trimmed reads]
+    F --> G[MultiQC trimmed-read summary]
+    E --> H{Species}
+    H -->|human| I[Bowtie2 hg38<br/>dovetail paired-end alignment]
+    H -->|mouse| J[Bowtie2 mm39<br/>dovetail paired-end alignment]
+    I --> K[Sorted BAM + BAI<br/>alignment metrics]
+    J --> K
+    K --> L[MultiQC alignment summary]
+    K --> M[Add read groups<br/>samtools addreplacerg]
+    M --> N[Picard MarkDuplicates<br/>REMOVE_DUPLICATES=true]
+    N --> O[Deduplicated BAM + BAI<br/>duplication metrics]
+    O --> P[MultiQC deduplication summary]
+    O --> Q[bedtools genomecov<br/>raw bedGraph]
+    O --> R[Standard chromosome filtering<br/>RPM scaling]
+    R --> S[Normalized bedGraph]
+    S --> T[Kent utilities<br/>bedGraphToBigWig]
+    T --> U[BigWig browser tracks]
+    U --> V[UCSC custom tracks file]
+    C --> W[Pipeline reports]
+    G --> W
+    L --> W
+    P --> W
+    V --> W

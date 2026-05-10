@@ -1,0 +1,27 @@
+# Bash syntax check
+
+Command used for each script:
+
+```bash
+bash -n <script>
+```
+
+| File | Result | Notes |
+|---|---:|---|
+| `fastq2tracks.2.1.sh` | OK |  |
+| `fastq2tracks.2.1_blocked.sh` | OK |  |
+| `fastqc_batch.1.0.sh` | OK |  |
+| `trimgalore_batch.1.0.sh` | OK |  |
+| `bowtie2_human_batch.2.1.sh` | OK |  |
+| `bowtie2_mouse_batch.2.1.sh` | OK |  |
+| `bowtie2_dovetail_pairedEnd_Hsapiens.2.1.sh` | OK |  |
+| `bowtie2_dovetail_pairedEnd_MMusculus.2.1.sh` | OK |  |
+| `picard_deduplication_batch.2.1.sh` | OK |  |
+| `picard_deduplication.2.1.sh` | OK |  |
+| `genomecoverage_batch.1.0.sh` | OK |  |
+| `genomeCoverage_DNA_human.1.0.sh` | OK |  |
+| `genomeCoverage_DNA_mouse.1.0.sh` | OK |  |
+| `create_ucsc_tracks.1.0.sh` | OK |  |
+| `generate_pipeline_report.1.0.sh` | OK |  |
+| `generate_multiqc_unified_report.1.0.sh` | OK |  |
+| `readme.2.1.sh` | FAIL | Change-log note, not runnable shell. Fails near `1.a)` because the file is prose, not Bash. |
