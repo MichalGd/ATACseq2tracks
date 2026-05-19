@@ -1,0 +1,33 @@
+name: fastq2tracks
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  # Core tools
+  - python=3.11
+  - r-base=4.3
+  - bowtie2>=2.5
+  - samtools>=1.18
+  - bedtools>=2.31
+  - trim-galore>=0.6.10
+  - fastqc>=0.12
+  - multiqc>=1.19
+  - macs2>=2.2.9.1
+  - pigz
+  # Java (for Picard)
+  - openjdk>=17
+  # Python utilities
+  - pip
+  - pip:
+      - multiqc
+  # R packages via bioconda
+  - bioconductor-chipqc>=1.38
+  - bioconductor-diffbind>=3.12
+  - bioconductor-biocparallel>=1.36
+  - bioconductor-genomicalignments>=1.38
+  - bioconductor-rtracklayer>=1.62
+  - r-dplyr>=1.1
+  - r-ggplot2>=3.4
+  - r-rmarkdown>=2.25
+  - r-knitr>=1.45
