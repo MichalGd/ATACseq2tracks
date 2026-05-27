@@ -1,81 +1,78 @@
 #!/bin/bash
-# =============================================================================
-# fastq2tracks v3.0 — Bowtie2 batch (samplesheet-driven, SE+PE, human+mouse)
-# Usage: bash scripts/bowtie2_batch.sh <samplesheet.csv> <trimmedFastqDir> <outBamDir>
-# =============================================================================
+# fastq2tracks v3.0.4 — Bowtie2 alignment batch (SE + PE, samplesheet-driven)
 set -euo pipefail
-source "$(dirname "$0")/../config/config.sh"
 
-SAMPLESHEET="$1"
-TRIM_DIR="$2"
-OUT_DIR="$3"
+_load_config() {
+    local _c="${F2T_CONFIG:-}"
+    if [[ -n "$_c" && -f "$_c" ]]; then source "$_c"
+    else
+        local _d; _d="$(cd "$(dirname "${BASH_SOURCE[1]}")" && pwd)"
+        _c="${_d}/../config/config.conf"
+        [[ -f "$_c" ]] && source "$_c" || { echo "ERROR: config.conf not found" >&2; exit 1; }
+    fi
+}
+_load_config
+
+SAMPLESHEET="$1"; TRIM_DIR="$2"; OUT_DIR="$3"
+mkdir -p "$OUT_DIR"
+LOG_DIR="${OUT_DIR}/bowtie2_logs"; mkdir -p "$LOG_DIR"
 MAX_JOBS="${THREADS_PARALLEL_JOBS}"
 
-mkdir -p "$OUT_DIR"
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-LOG_DIR="${OUT_DIR}/bowtie2_batch_logs_${TIMESTAMP}"
-mkdir -p "$LOG_DIR/individual_jobs"
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"; }
 
-log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_DIR/main.log"; }
-
-declare -a job_pids=()
-declare -a job_names=()
-
-wait_for_slot() {
-    while [[ ${#job_pids[@]} -ge $MAX_JOBS ]]; do
-        local new_pids=() new_names=()
-        for i in "${!job_pids[@]}"; do
-            if kill -0 "${job_pids[$i]}" 2>/dev/null; then
-                new_pids+=("${job_pids[$i]}")
-                new_names+=("${job_names[$i]}")
-            else
-                log "COMPLETED: ${job_names[$i]}"
-            fi
-        done
-        job_pids=("${new_pids[@]+"${new_pids[@]}"}")
-        job_names=("${new_names[@]+"${new_names[@]}"}")
-        [[ ${#job_pids[@]} -ge $MAX_JOBS ]] && sleep 3
+declare -a pids=()
+wait_slot() {
+    while [[ ${#pids[@]} -ge $MAX_JOBS ]]; do
+        local new=()
+        for p in "${pids[@]}"; do kill -0 "$p" 2>/dev/null && new+=("$p"); done
+        pids=("${new[@]+"${new[@]}"}"); sleep 2
     done
 }
 
-log "=== Bowtie2 Batch === Samplesheet: $SAMPLESHEET"
+log "=== Bowtie2 alignment batch ==="
 
-tail -n +2 "$SAMPLESHEET" | while IFS=',' read -r sample_id fastq_1 fastq_2 layout genome assay factor condition treatment cell_type replicate tech_rep is_control control_id macs2_mode blacklist chipqc_anno output_prefix rest; do
-    sample_id="${sample_id//\"/}"
-    layout="${layout//\"/}"
-    genome="${genome//\"/}"
+while IFS=',' read -r sid fq1 fq2 layout genome assay factor condition treatment celltype rep tech_rep is_ctr rest; do
+    [[ "$sid" == "sample_id" ]] && continue
+    sid="${sid//\"/}"; layout="${layout//\"/}"; genome="${genome//\"/}"
+    rep="${rep//\"/}"; tech_rep="${tech_rep//\"/}"
+    KEY="${sid}_bioR${rep}"
+    BAM_OUT="${OUT_DIR}/${KEY}.bam"
+    [[ -f "$BAM_OUT" ]] && { log "SKIP $KEY (BAM exists)"; continue; }
 
-    # resolve index
-    if [[ "$genome" == "hg38" ]]; then INDEX="$INDEX_HG38"
-    elif [[ "$genome" == "mm39" ]]; then INDEX="$INDEX_MM39"
-    else log "SKIP $sample_id — unknown genome $genome"; continue; fi
+    case "$genome" in
+        hg38) INDEX="$INDEX_HG38" ;;
+        mm39) INDEX="$INDEX_MM39" ;;
+        *)    log "WARN: unknown genome '$genome' for $KEY, skipping"; continue ;;
+    esac
 
-    # resolve trimmed R1
-    R1_file="${TRIM_DIR}/${sample_id}_1_val_1.fq.gz"
-    [[ ! -f "$R1_file" ]] && R1_file="${TRIM_DIR}/${sample_id}_R1_001_val_1.fq.gz"
-    [[ ! -f "$R1_file" ]] && R1_file="${TRIM_DIR}/${sample_id}_trimmed.fq.gz"
-    [[ ! -f "$R1_file" ]] && { log "SKIP $sample_id — trimmed R1 not found"; continue; }
-
-    OUT_BAM="${OUT_DIR}/${sample_id}.sorted_stChr.bam"
-    [[ -f "$OUT_BAM" ]] && { log "SKIP $sample_id (BAM exists)"; continue; }
-
-    wait_for_slot
-
+    wait_slot
     (
-        JOB_LOG="$LOG_DIR/individual_jobs/${sample_id}.log"
+        JOB_LOG="${LOG_DIR}/${KEY}.log"
         if [[ "$layout" == "PE" ]]; then
-            R2_file="${TRIM_DIR}/${sample_id}_2_val_2.fq.gz"
-            [[ ! -f "$R2_file" ]] && R2_file="${TRIM_DIR}/${sample_id}_R2_001_val_2.fq.gz"
-            bash "$(dirname "$0")/bowtie2_align.sh" "$INDEX" "$R1_file" "$OUT_DIR" "PE" "$R2_file" >"$JOB_LOG" 2>&1
+            R1="${TRIM_DIR}/${KEY}_1_val_1.fq.gz"
+            R2="${TRIM_DIR}/${KEY}_2_val_2.fq.gz"
+            if [[ ! -f "$R1" || ! -f "$R2" ]]; then
+                echo "ERROR: trimmed PE files not found for $KEY: $R1 / $R2" | tee -a "$JOB_LOG" >&2
+                exit 1
+            fi
+            bowtie2 -x "$INDEX" -1 "$R1" -2 "$R2" \
+                -p "${THREADS_ALIGN}" --no-mixed --no-discordant --dovetail \
+                2>>"$JOB_LOG" | samtools sort -@ "${THREADS_SAMTOOLS}" -o "$BAM_OUT"
         else
-            bash "$(dirname "$0")/bowtie2_align.sh" "$INDEX" "$R1_file" "$OUT_DIR" "SE" >"$JOB_LOG" 2>&1
+            R1="${TRIM_DIR}/${KEY}_trimmed.fq.gz"
+            if [[ ! -f "$R1" ]]; then
+                echo "ERROR: trimmed SE file not found for $KEY: $R1" | tee -a "$JOB_LOG" >&2
+                exit 1
+            fi
+            bowtie2 -x "$INDEX" -U "$R1" \
+                -p "${THREADS_ALIGN}" \
+                2>>"$JOB_LOG" | samtools sort -@ "${THREADS_SAMTOOLS}" -o "$BAM_OUT"
         fi
+        samtools index "$BAM_OUT" >> "$JOB_LOG" 2>&1
     ) &
-    job_pids+=($!)
-    job_names+=("$sample_id")
-    log "STARTED: $sample_id [${layout}] [${genome}] [PID:${job_pids[-1]}]"
-done
+    pids+=($!)
+    log "STARTED: $KEY [$layout] genome=$genome"
+done < "$SAMPLESHEET"
 
-# wait remaining
-for pid in "${job_pids[@]+"${job_pids[@]}"}"; do wait "$pid" || true; done
-log "=== Bowtie2 batch complete ==="
+for p in "${pids[@]+"${pids[@]}"}"; do wait "$p" || true; done
+log "=== Bowtie2 alignment batch complete ==="

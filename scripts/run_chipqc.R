@@ -1,143 +1,124 @@
 #!/usr/bin/env Rscript
 # =============================================================================
-# fastq2tracks v3.0 — ChIPQC module
-# Usage: Rscript scripts/run_chipqc.R <samplesheet.csv> <filteredBamDir> <peaksDir> <outDir> <genome> <workers>
-#   genome  : hg38 or mm39
-#   workers : number of BiocParallel workers (default 20)
-# Uses pre-built annotation + blacklist RDS objects from config.sh
+# fastq2tracks v3.0.2 — ChIPQC module
+#
+# Usage:
+#   Rscript scripts/run_chipqc.R \
+#       <samplesheet.csv> <bamDir> <peaksDir> <outDir> \
+#       <genome: hg38|mm39> [workers:20] [peakType:narrow|broad] \
+#       [/absolute/path/to/config.sh]
+#
+# config.sh resolution order:
+#   1. 8th argument
+#   2. Environment variable F2T_CONFIG
+#   3. Auto-detect: <script_dir>/../config/config.sh
 # =============================================================================
 suppressPackageStartupMessages({
-  library(ChIPQC)
-  library(BiocParallel)
-  library(dplyr)
-  library(ggplot2)
+    library(ChIPQC); library(BiocParallel)
+    library(dplyr);  library(ggplot2)
 })
 
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) < 5) {
-  stop("Usage: Rscript run_chipqc.R <samplesheet.csv> <filteredBamDir> <peaksDir> <outDir> <genome> [workers]")
-}
+if (length(args) < 5) stop(
+    "Usage: Rscript run_chipqc.R <ss.csv> <bamDir> <peaksDir> <outDir> <genome> [workers] [peakType] [config.sh]")
 
-samplesheet_csv <- args[1]
-bam_dir         <- args[2]
-peaks_dir       <- args[3]
-out_dir         <- args[4]
-genome_key      <- args[5]
-n_workers       <- as.integer(ifelse(length(args) >= 6, args[6], 20))
+samplesheet_csv <- args[1]; bam_dir  <- args[2]
+peaks_dir       <- args[3]; out_dir  <- args[4]
+genome_key      <- tolower(args[5])
+n_workers       <- as.integer(ifelse(length(args) >= 6 && nchar(args[6]) > 0, args[6], 20))
+peak_type_pref  <- ifelse(length(args) >= 7 && nchar(args[7]) > 0, tolower(args[7]), "narrow")
 
-dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
-
-# --- Load config paths ---
-config_sh <- readLines(file.path(dirname(getwd()), "fastq2tracks", "config", "config.sh"),
-                        warn = FALSE)
-get_cfg <- function(key) {
-  line <- grep(paste0("^", key, "="), config_sh, value = TRUE)[1]
-  if (is.na(line)) return(NULL)
-  gsub(paste0("^", key, '="?|"?$'), "", line)
-}
-
-if (genome_key == "hg38") {
-  anno_rds      <- get_cfg("CHIPQC_ANNOTATION_HG38")
-  blacklist_rds <- get_cfg("CHIPQC_BLACKLIST_HG38_RDS")
-} else if (genome_key == "mm39") {
-  anno_rds      <- get_cfg("CHIPQC_ANNOTATION_MM39")
-  blacklist_rds <- get_cfg("CHIPQC_BLACKLIST_MM39_RDS")
+# ---- Resolve config.sh -------------------------------------------------------
+config_sh_path <- if (length(args) >= 8 && nchar(args[8]) > 0) {
+    args[8]
+} else if (nchar(Sys.getenv("F2T_CONFIG")) > 0) {
+    Sys.getenv("F2T_CONFIG")
 } else {
-  stop("Unsupported genome: ", genome_key)
+    # Auto-detect: this script lives in <install>/scripts/
+    script_dir <- tryCatch(
+        normalizePath(dirname(sys.frame(1)$ofile)),
+        error = function(e) getwd()
+    )
+    file.path(dirname(script_dir), "config", "config.conf")
+}
+if (!file.exists(config_sh_path))
+    stop("config.sh not found: ", config_sh_path,
+         "\nPass as 8th argument or export F2T_CONFIG.")
+cat("Config:", config_sh_path, "\n")
+
+cfg_lines <- readLines(config_sh_path, warn = FALSE)
+get_cfg <- function(key) {
+    line <- grep(paste0("^\\s*", key, "\\s*="), cfg_lines, value = TRUE)[1]
+    if (is.na(line)) return(NULL)
+    val <- sub(paste0("^\\s*", key, "\\s*=\\s*['\"]?"), "", line)
+    val <- sub("['\"]?\\s*(#.*)?$", "", val); trimws(val)
 }
 
-cat("Loading annotation:", anno_rds, "\n")
-cat("Loading blacklist: ", blacklist_rds, "\n")
-annotation <- readRDS(anno_rds)
-blacklist   <- readRDS(blacklist_rds)
+anno_rds <- blacklist_rds <- NULL
+if (genome_key == "hg38") {
+    anno_rds      <- get_cfg("CHIPQC_ANNOTATION_HG38")
+    blacklist_rds <- get_cfg("CHIPQC_BLACKLIST_HG38_RDS")
+} else if (genome_key == "mm39") {
+    anno_rds      <- get_cfg("CHIPQC_ANNOTATION_MM39")
+    blacklist_rds <- get_cfg("CHIPQC_BLACKLIST_MM39_RDS")
+} else stop("Unsupported genome: ", genome_key)
 
-# --- Parse samplesheet ---
+cat("Annotation :", anno_rds, "\nBlacklist  :", blacklist_rds, "\n")
+annotation <- readRDS(anno_rds); blacklist <- readRDS(blacklist_rds)
+
 ss <- read.csv(samplesheet_csv, stringsAsFactors = FALSE)
 ss <- ss[tolower(ss$genome) == genome_key, ]
-ss <- ss[tolower(ss$is_control) %in% c("false", "0", "no"), ]
+ss <- ss[tolower(ss$is_control) %in% c("false","0","no"), ]
+if (nrow(ss) == 0) stop("No IP samples for genome: ", genome_key)
 
-if (nrow(ss) == 0) stop("No IP samples found for genome: ", genome_key)
+chipqc_ss <- do.call(rbind, lapply(seq_len(nrow(ss)), function(i) {
+    sid <- ss$sample_id[i]
+    bam <- file.path(bam_dir, paste0(sid, "_dedup_blFilt.bam"))
+    if (!file.exists(bam)) bam <- file.path(bam_dir, paste0(sid, "_dedup.bam"))
+    p_narrow <- file.path(peaks_dir, "per_replicate", sid, "narrow",
+                           paste0(sid, "_peaks.narrowPeak"))
+    p_broad  <- file.path(peaks_dir, "per_replicate", sid, "broad",
+                           paste0(sid, "_peaks.broadPeak"))
+    peak <- if (peak_type_pref == "narrow") {
+        if (file.exists(p_narrow)) p_narrow else if (file.exists(p_broad)) p_broad else NA_character_
+    } else {
+        if (file.exists(p_broad)) p_broad else if (file.exists(p_narrow)) p_narrow else NA_character_
+    }
+    data.frame(SampleID=sid, Tissue=ss$cell_type[i], Factor=ss$factor[i],
+               Condition=ss$condition[i], Treatment=ss$treatment[i],
+               Replicate=ss$replicate[i], bamReads=bam, Peaks=peak,
+               PeakCaller=peak_type_pref, stringsAsFactors=FALSE)
+}))
 
-# Build ChIPQC samplesheet
-chipqc_ss <- lapply(seq_len(nrow(ss)), function(i) {
-  sid  <- ss$sample_id[i]
-  
-  # BAM: prefer blacklist-filtered
-  bam <- file.path(bam_dir, paste0(sid, "_dedup_blFilt.bam"))
-  if (!file.exists(bam)) bam <- file.path(bam_dir, paste0(sid, "_dedup.bam"))
-  
-  # Peaks: prefer narrowPeak, fall back to broadPeak
-  peak <- file.path(peaks_dir, "per_replicate", sid,
-                    paste0(sid, "_peaks.narrowPeak"))
-  if (!file.exists(peak))
-    peak <- file.path(peaks_dir, "per_replicate", sid,
-                      paste0(sid, "_peaks.broadPeak"))
-  if (!file.exists(peak)) peak <- NA_character_
-
-  data.frame(
-    SampleID   = sid,
-    Tissue     = ss$cell_type[i],
-    Factor     = ss$factor[i],
-    Condition  = ss$condition[i],
-    Treatment  = ss$treatment[i],
-    Replicate  = ss$replicate[i],
-    bamReads   = bam,
-    Peaks      = peak,
-    PeakCaller = ifelse(grepl("narrow", ss$macs2_mode[i], ignore.case=TRUE),
-                        "narrow", "broad"),
-    stringsAsFactors = FALSE
-  )
-})
-chipqc_ss <- do.call(rbind, chipqc_ss)
-
-# Remove samples with missing BAM
 missing_bam <- !file.exists(chipqc_ss$bamReads)
 if (any(missing_bam)) {
-  cat("WARNING: Dropping samples with missing BAMs:\n")
-  cat(chipqc_ss$SampleID[missing_bam], sep="\n")
-  chipqc_ss <- chipqc_ss[!missing_bam, ]
+    cat("WARNING: Dropping samples with missing BAMs:\n")
+    cat(chipqc_ss$SampleID[missing_bam], sep="\n"); cat("\n")
+    chipqc_ss <- chipqc_ss[!missing_bam,]
 }
+if (nrow(chipqc_ss) == 0) stop("No valid samples remain after BAM check.")
 
+report_label <- paste0("ChIPQC_", genome_key, "_", peak_type_pref)
+out_subdir   <- file.path(out_dir, report_label)
+dir.create(out_subdir, showWarnings=FALSE, recursive=TRUE)
+write.csv(chipqc_ss, file.path(out_subdir, "chipqc_samplesheet.csv"), row.names=FALSE)
 cat("ChIPQC samples:", nrow(chipqc_ss), "\n")
-write.csv(chipqc_ss, file.path(out_dir, "chipqc_samplesheet.csv"), row.names = FALSE)
 
-# --- Configure BiocParallel ---
-register(MulticoreParam(workers = n_workers, progressbar = TRUE))
+register(MulticoreParam(workers=n_workers, progressbar=TRUE))
 cat("BiocParallel workers:", n_workers, "\n")
+cat("Running ChIPQC (", genome_key, peak_type_pref, ")...\n")
 
-# --- Run ChIPQC ---
-cat("Running ChIPQC...\n")
 experiment <- ChIPQC(
-  experiment  = chipqc_ss,
-  annotation  = annotation,
-  blacklist   = blacklist,
-  chromosomes = if (genome_key == "hg38") {
-    paste0("chr", c(1:22, "X", "Y"))
-  } else {
-    paste0("chr", c(1:19, "X", "Y"))
-  },
-  BPPARAM = bpparam()
+    experiment  = chipqc_ss, annotation = annotation, blacklist = blacklist,
+    chromosomes = if (genome_key == "hg38") paste0("chr", c(1:22,"X","Y"))
+                  else paste0("chr", c(1:19,"X","Y")),
+    BPPARAM = bpparam()
 )
+ChIPQCreport(object=experiment, reportName=report_label,
+             reportFolder=out_subdir, facet=TRUE, colourBy="Condition")
 
-# --- Reports ---
-cat("Generating ChIPQC report...\n")
-ChIPQCreport(
-  object    = experiment,
-  reportName= paste0("ChIPQC_report_", genome_key),
-  reportFolder = out_dir,
-  facet     = TRUE,
-  colourBy  = "Condition"
-)
-
-# --- Summary tables ---
 qc_metrics <- QCmetrics(experiment)
-write.csv(as.data.frame(qc_metrics),
-          file.path(out_dir, "chipqc_metrics_summary.csv"))
-
-frip <- data.frame(
-  SampleID = chipqc_ss$SampleID,
-  FRiP     = round(frip(experiment), 4)
-)
-write.csv(frip, file.path(out_dir, "chipqc_frip.csv"), row.names = FALSE)
-
-cat("ChIPQC complete. Outputs in:", out_dir, "\n")
+write.csv(as.data.frame(qc_metrics), file.path(out_subdir, "chipqc_metrics_summary.csv"))
+frip_df <- data.frame(SampleID=chipqc_ss$SampleID, FRiP=round(frip(experiment), 4))
+write.csv(frip_df, file.path(out_subdir, "chipqc_frip.csv"), row.names=FALSE)
+cat("ChIPQC complete. Outputs in:", out_subdir, "\n")

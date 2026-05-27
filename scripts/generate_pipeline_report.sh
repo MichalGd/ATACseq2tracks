@@ -1,9 +1,23 @@
 #!/bin/bash
-# =============================================================================
-# fastq2tracks v3.0 — Pipeline report wrapper
-# Usage: bash scripts/generate_pipeline_report.sh <outDir> <reportName> <format>
-# Wraps the existing generate_pipeline_report.1.0.sh logic (now in scripts/)
-# =============================================================================
+# fastq2tracks v3.0.2 — Unified MultiQC pipeline report wrapper
+# Usage: bash scripts/generate_pipeline_report.sh <outDir> [reportDir] [format]
 set -euo pipefail
-source "$(dirname "$0")/../config/config.sh"
-exec "$(dirname "$0")/generate_multiqc_unified_report.sh" "$@"
+_load_config() {
+    if [[ -n "${F2T_CONFIG:-}" && -f "${F2T_CONFIG}" ]]; then
+        source "${F2T_CONFIG}"
+    else
+        local _d; _d="$(cd "$(dirname "${BASH_SOURCE[1]}")" && pwd)"
+        local _c="${_d}/../config/config.conf"
+        [[ -f "$_c" ]] && source "$_c" || {
+            echo "ERROR: config.sh not found. Export F2T_CONFIG or pass --config to fastq2tracks.sh." >&2
+            exit 1
+        }
+    fi
+}
+_load_config
+
+OUT_DIR="$1"; REPORT_DIR="${2:-${OUT_DIR}/reports}"; FORMAT="${3:-html}"
+mkdir -p "$REPORT_DIR"
+multiqc "$OUT_DIR" -o "$REPORT_DIR" -n "fastq2tracks_unified_$(date +%Y%m%d)" \
+    --data-format tsv --export -f
+echo "Unified MultiQC report in: $REPORT_DIR"
