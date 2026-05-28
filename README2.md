@@ -1,7 +1,7 @@
 # fastq2tracks
 
 > **ChIP-seq · ATAC-seq · CUT&RUN · CUT&TAG**
-> A modular, checkpoint-based workflow from raw FASTQ to bigwig tracks, MACS3 peaks, ChIPQC reports, and DiffBind-ready samplesheets.
+> A modular, checkpoint-based workflow from raw FASTQ to bigwig tracks, MACS2 peaks, ChIPQC reports, and DiffBind-ready samplesheets.
 
 [![Version](https://img.shields.io/badge/version-3.0.4-blue.svg)](CHANGELOG.md)
 [![Genome](https://img.shields.io/badge/genome-hg38%20%7C%20mm39-orange.svg)]()
@@ -27,9 +27,8 @@
 11. [Rerunning individual steps](#rerunning-individual-steps)
 12. [Downstream analysis: DiffBind](#downstream-analysis-diffbind)
 13. [Server resource tuning](#server-resource-tuning)
-14. [Documentation](#documentation)
-15. [Known issues and changelog](#known-issues-and-changelog)
-16. [Citation](#citation)
+14. [Known issues and changelog](#known-issues-and-changelog)
+15. [Citation](#citation)
 
 ---
 
@@ -39,17 +38,17 @@
 
 | What it does | Tools used |
 |---|---|
-| Adapter trimming (SE and PE) | [Trim Galore](https://www.bioinformatics.babraham.ac.uk/projects/trim_galore/) v2.2+ |
-| Read quality control | [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) + [MultiQC](https://multiqc.info/) |
-| Alignment to hg38 or mm39 | [Bowtie2](https://bowtie-bio.sourceforge.net/bowtie2/index.shtml) |
-| Duplicate removal | [Picard MarkDuplicates](https://broadinstitute.github.io/picard/command-line-overview.html#MarkDuplicates) |
-| Blacklist region filtering | [bedtools](https://bedtools.readthedocs.io/) intersect |
-| Normalised bigwig track generation | [bedGraphToBigWig](https://hgdownload.soe.ucsc.edu/admin/exe/) + [samtools](http://www.htslib.org/) |
-| Merged-replicate bigwig tracks | [samtools](http://www.htslib.org/) merge |
-| Narrow and broad peak calling | [MACS3](https://macs3-project.github.io/MACS/) |
-| ChIP-seq quality assessment | [ChIPQC](https://bioconductor.org/packages/release/bioc/html/ChIPQC.html) (Bioconductor) |
-| DiffBind samplesheet preparation | [R](https://www.r-project.org/) / [dplyr](https://dplyr.tidyverse.org/) |
-| UCSC track hub generation | [UCSC Genome Browser](https://genome.ucsc.edu/) trackDb |
+| Adapter trimming (SE and PE) | Trim Galore v2.2+ |
+| Read quality control | FastQC + MultiQC |
+| Alignment to hg38 or mm39 | Bowtie2 |
+| Duplicate removal | Picard MarkDuplicates |
+| Blacklist region filtering | bedtools |
+| Normalised bigwig track generation | bedGraphToBigWig + samtools |
+| Merged-replicate bigwig tracks | samtools merge |
+| Narrow and broad peak calling | MACS2 |
+| ChIP-seq quality assessment | ChIPQC (Bioconductor) |
+| DiffBind samplesheet preparation | R / dplyr |
+| UCSC track hub generation | bash |
 | HTML pipeline report | bash |
 
 A single CSV **samplesheet** drives the entire run. All parameters (paths, thread counts, reference files) live in one **config file**. A **checkpoint system** records each completed step so partial runs resume safely without re-processing finished work.
@@ -65,7 +64,7 @@ Both pipelines share the same design philosophy — samplesheet-driven, config-f
 | Assay | ChIP-seq, ATAC-seq, CUT&RUN, CUT&TAG | RNA-seq |
 | Alignment | Bowtie2 (gapped-free, short reads) | STAR or HISAT2 (splice-aware) |
 | Duplicate removal | Picard MarkDuplicates | Optional (ribosomal depletion QC) |
-| Peak calling | MACS3 (narrow + broad) | — |
+| Peak calling | MACS2 (narrow + broad) | — |
 | Track normalisation | Library-size (RPKM / spike-in) | TPM / CPM |
 | QC module | ChIPQC | RSeQC / MultiQC |
 | Downstream prep | DiffBind samplesheets | DESeq2 / edgeR count matrices |
@@ -89,7 +88,7 @@ flowchart TD
     G --> H[Step 6\nBlacklist filtering\nblacklist_filter_batch.sh]
     H --> I[Step 7\nGenome coverage tracks\ngenomecoverage_batch.sh]
     H --> J[Step 8\nReplicate merging\nmerge_replicates.sh]
-    H --> K[Step 9\nMACS3 peak calling\nmacs2_batch.sh]
+    H --> K[Step 9\nMACS2 peak calling\nmacs2_batch.sh]
     I --> L[(bigwig/\nbedGraph/)]
     J --> M[(bigwig_merged/)]
     K --> N[(peaks/\nnarrow + broad)]
@@ -126,20 +125,6 @@ fastq2tracks/
 │   ├── samplesheet_template.csv ← Empty samplesheet with all column headers
 │   └── samplesheet_example.csv  ← Populated example rows
 │
-├── docs/                        ← Full documentation (see Documentation section)
-│   ├── README.md                ← Documentation index
-│   ├── 01_overview.md
-│   ├── 02_quickstart.md
-│   ├── 03_installation.md
-│   ├── 04_inputs.md
-│   ├── 05_running.md
-│   ├── 06_pipeline_steps.md
-│   ├── 07_outputs.md
-│   ├── 08_diffbind.md
-│   ├── 09_troubleshooting.md
-│   ├── 10_reference_files.md
-│   └── 11_blacklist_filtering.md
-│
 └── scripts/
     ├── smoke_test.sh            ← Pre-flight: tools, files, samplesheet
     ├── validate_samplesheet.py  ← CSV schema and logic validation
@@ -154,7 +139,7 @@ fastq2tracks/
     ├── genomecoverage_single.sh ← Single-sample bedGraph + bigwig
     ├── genomecoverage_batch.sh
     ├── merge_replicates.sh
-    ├── macs2_peaks.sh           ← Single-sample wrapper (calls macs3)
+    ├── macs2_peaks.sh           ← Single-sample wrapper
     ├── macs2_batch.sh
     ├── run_chipqc.R
     ├── prepare_diffbind.R
@@ -172,21 +157,19 @@ fastq2tracks/
 
 All command-line tools are managed via conda. See [Installation](#installation).
 
-| Tool | Min version | Role | Homepage |
-|---|---|---|---|
-| [bowtie2](https://bowtie-bio.sourceforge.net/bowtie2/index.shtml) | 2.5 | Short-read alignment | bowtie-bio.sourceforge.net |
-| [samtools](http://www.htslib.org/) | 1.18 | BAM sorting, indexing, merging | htslib.org |
-| [bedtools](https://bedtools.readthedocs.io/) | 2.31 | Blacklist filtering, genome coverage | bedtools.readthedocs.io |
-| [Trim Galore](https://www.bioinformatics.babraham.ac.uk/projects/trim_galore/) | 2.2.0 | Adapter trimming, SE and PE | bioinformatics.babraham.ac.uk |
-| [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) | 0.12 | Per-sample read QC | bioinformatics.babraham.ac.uk |
-| [MACS3](https://macs3-project.github.io/MACS/) | 3.0.4 | Peak calling (narrow + broad) | macs3-project.github.io |
-| [MultiQC](https://multiqc.info/) | 1.20 | Aggregated QC HTML reports | multiqc.info |
-| [Picard](https://broadinstitute.github.io/picard/) | 3.1 (`.jar`) | Duplicate marking | broadinstitute.github.io/picard |
-| [bedGraphToBigWig](https://hgdownload.soe.ucsc.edu/admin/exe/) | UCSC kent | bigwig conversion | hgdownload.soe.ucsc.edu |
-| [python3](https://www.python.org/) | 3.9+ | Samplesheet validation | python.org |
-| [R](https://www.r-project.org/) | 4.3+ | ChIPQC, DiffBind preparation | r-project.org |
-
-> **Note on MACS3:** The pipeline uses [MACS3](https://macs3-project.github.io/MACS/) (v3.0.4+), the fully Python-rewritten successor to MACS2. MACS3 uses an identical command-line interface and produces equivalent results, but is compatible with Python 3.11+ and modern glibc. Install via `pip install macs3`.
+| Tool | Minimum version | Role |
+|---|---|---|
+| bowtie2 | 2.5 | Alignment |
+| samtools | 1.18 | BAM processing and sorting |
+| bedtools | 2.31 | Blacklist filtering, coverage |
+| trim_galore | 2.2.0 (Oxidized Edition) | Adapter trimming, SE and PE |
+| fastqc | 0.12 | Per-sample read QC |
+| macs2 | 2.2.9 | Peak calling |
+| multiqc | 1.20 | Aggregated QC reports |
+| picard | 3.1 (`.jar`) | Duplicate marking |
+| bedGraphToBigWig | UCSC kent | bigwig conversion |
+| python3 | 3.9+ | Samplesheet validation |
+| R | 4.3+ | ChIPQC, DiffBind preparation |
 
 ### R / Bioconductor packages
 
@@ -209,7 +192,7 @@ The following files must be present on your server and their paths set in `confi
 | hg38 chrom sizes | `CHROM_SIZES_HUMAN` | `fetchChromSizes hg38` |
 | mm39 chrom sizes | `CHROM_SIZES_MOUSE` | `fetchChromSizes mm39` |
 | hg38 blacklist BED | `BLACKLIST_HG38` | [ENCODE ENCFF356LFX](https://www.encodeproject.org/files/ENCFF356LFX/) |
-| mm39 blacklist BED | `BLACKLIST_MM39` | [excluderanges (Bioconductor)](https://bioconductor.org/packages/release/data/annotation/html/excluderanges.html) |
+| mm39 blacklist BED | `BLACKLIST_MM39` | [Boyle lab](https://github.com/Boyle-Lab/Blacklist) |
 | hg38 ChIPQC annotation RDS | `CHIPQC_ANNOTATION_HG38` | Pre-built from `TxDb.Hsapiens.UCSC.hg38.knownGene` |
 | mm39 ChIPQC annotation RDS | `CHIPQC_ANNOTATION_MM39` | Pre-built from `TxDb.Mmusculus.UCSC.mm39.refGene` |
 | hg38 ChIPQC blacklist RDS | `CHIPQC_BLACKLIST_HG38_RDS` | Converted from BED via `rtracklayer::import` |
@@ -228,18 +211,15 @@ cd fastq2tracks
 conda env create -f environment.yml
 conda activate fastq2tracks
 
-# 3. Install MACS3 (Python 3.11 compatible peak caller)
-pip install macs3
-
-# 4. Make scripts executable
+# 3. Make scripts executable
 chmod +x fastq2tracks.sh scripts/*.sh scripts/*.py scripts/*.R
 
-# 5. Create a project directory and copy templates
+# 4. Create a project directory and copy templates
 mkdir -p /path/to/my_project/config
 cp config/config.conf              /path/to/my_project/config/config.conf
 cp config/samplesheet_template.csv /path/to/my_project/config/samplesheet.csv
 
-# 6. Edit both files for your project
+# 5. Edit both files for your project
 nano /path/to/my_project/config/config.conf
 nano /path/to/my_project/config/samplesheet.csv
 ```
@@ -386,10 +366,10 @@ nohup bash fastq2tracks/fastq2tracks.sh \
 | 3 — FastQC trimmed | `fastqc_batch.sh` | trimmed FASTQs | `fastQC/fastQC_trimmed/` + MultiQC | |
 | 4 — Alignment | `bowtie2_batch.sh` | trimmed FASTQs | `bams/*.bam` + MultiQC | Dispatches `bowtie2_align.sh`; handles hg38 and mm39 per-row |
 | 5 — Deduplication | `picard_dedup_batch.sh` | `bams/` | `dedupBams/<id>_bioR<N>_dedup.bam` + MultiQC | Adds RG tags first; output name includes `_bioR<replicate>` |
-| 6 — Blacklist filter | `blacklist_filter_batch.sh` | `dedupBams/` | `filteredBams/<id>_bioR<N>_dedup_blFilt.bam` | Uses blacklist path from samplesheet column 16; see [docs/11_blacklist_filtering.md](docs/11_blacklist_filtering.md) |
+| 6 — Blacklist filter | `blacklist_filter_batch.sh` | `dedupBams/` | `filteredBams/<id>_bioR<N>_dedup_blFilt.bam` | Uses blacklist path from samplesheet column 16 |
 | 7 — Coverage tracks | `genomecoverage_batch.sh` | `filteredBams/` | `bigwig/*.bw`, `bedGraph/`, `NormBedGraph/` | Library-size normalised; spike-in normalisation if configured |
 | 8 — Merged tracks | `merge_replicates.sh` | `filteredBams/` | `bigwig_merged/*.bw` | Groups by `factor__condition__treatment__cell_type__genome` |
-| 9 — Peak calling | `macs2_batch.sh` | `filteredBams/` | `peaks/per_replicate/` + `peaks/pooled/` | Calls [MACS3](https://macs3-project.github.io/MACS/); always runs both narrow and broad; uses `control_id` linkage |
+| 9 — Peak calling | `macs2_batch.sh` | `filteredBams/` | `peaks/per_replicate/` + `peaks/pooled/` | Always runs both narrow and broad; uses `control_id` linkage |
 | 10 — ChIPQC | `run_chipqc.R` | filtered BAMs + peaks | `chipqc/ChIPQC_<genome>_<mode>/` | BiocParallel; runs twice (narrow + broad) per genome |
 | 11 — DiffBind prep | `prepare_diffbind.R` | filtered BAMs + peaks | `diffbind/diffbind_samplesheet_<genome>_<mode>.csv` | Two CSVs per genome |
 | 12 — UCSC tracks | `create_ucsc_tracks.sh` | `bigwig/` + `bigwig_merged/` | `reports/ucsc_trackdb.txt` | Points to bigwig files on a user-configured web server |
@@ -461,7 +441,7 @@ nohup bash fastq2tracks/fastq2tracks.sh \
 Each step writes a checkpoint file `<OUTPUT_DIR>/.checkpoints/stepN.done` when it completes. To rerun any step, delete its checkpoint and re-execute the master script — all earlier completed steps will be skipped.
 
 ```bash
-# Rerun step 9 (MACS3 peak calling) only
+# Rerun step 9 (MACS2 peak calling) only
 rm /path/to/analysis/.checkpoints/step9.done
 nohup bash fastq2tracks/fastq2tracks.sh \
     --config /path/to/config/config.conf \
@@ -528,12 +508,9 @@ Full documentation is available in the [`docs/`](docs/) directory.
 | 🚀 [Quick start](docs/02_quickstart.md) | Get running in 5 steps |
 | 📋 [Samplesheet format](docs/04_inputs.md) | Column reference and examples |
 | 🔧 [Configuration](docs/04_inputs.md#configuration-file) | All config parameters |
-| 🔬 [Pipeline steps](docs/06_pipeline_steps.md) | Every step explained in detail |
 | 📊 [Outputs](docs/07_outputs.md) | What files are produced and how to read them |
-| 🧬 [DiffBind downstream](docs/08_diffbind.md) | Differential binding analysis |
-| 🚫 [Blacklist filtering](docs/11_blacklist_filtering.md) | How filtering works, what it removes, blacklist sources and references |
+| 🔬 [DiffBind downstream](docs/08_diffbind.md) | Differential binding analysis |
 | 🛠 [Troubleshooting](docs/09_troubleshooting.md) | Common errors and fixes |
-| 📚 [Reference file preparation](docs/10_reference_files.md) | Building ChIPQC RDS objects and blacklist files |
 
 ---
 
@@ -552,7 +529,6 @@ Full documentation is available in the [`docs/`](docs/) directory.
 | Missing closing `}` in `_load_config` and `wait_for_slot` | Fixed in `blacklist_filter_batch.sh` |
 | `ctrl_rep` undefined in `macs2_batch.sh` | Pre-built `sid_rep[]` lookup map added |
 | Bare `replicate` variable in R scripts | Changed to `ss$replicate[i]` / `ss_ip$replicate[i]` |
-| MACS2 `ImportError: undefined symbol: __log_finite` | Replaced with MACS3 v3.0.4 (`pip install macs3`); identical CLI, Python 3.11 compatible |
 
 ### v3.0.0 (2026-05-19)
 
@@ -580,6 +556,21 @@ If you use fastq2tracks in your work, please cite:
 Gdula M. fastq2tracks — ChIP-seq track-generation and QC workflow, v3.0.
 https://github.com/MichalGd/fastq2tracks (2026)
 ```
+
+---
+
+## Recommended additional documentation
+
+The following files would improve the repository further:
+
+| File | Description |
+|---|---|
+| `CHANGELOG.md` | Full version history (content from the changelog section above) |
+| `docs/building_reference_files.md` | How to build the ChIPQC annotation and blacklist RDS objects |
+| `docs/ucsc_track_hub.md` | How to serve bigwig files and load them into UCSC Genome Browser |
+| `docs/diffbind_workflow.md` | Extended DiffBind example from samplesheet to differential peaks |
+| `config/samplesheet_example.csv` | Populated example rows covering SE, PE, mixed genomes |
+| `.github/ISSUE_TEMPLATE/bug_report.md` | Structured bug report template |
 
 ---
 
