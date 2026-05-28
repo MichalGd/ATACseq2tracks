@@ -499,6 +499,21 @@ For smaller servers (e.g. 16 cores), use `THREADS_PARALLEL_JOBS=2` and `THREADS_
 
 ---
 
+## Documentation
+
+Full documentation is available in the [`docs/`](docs/) directory.
+
+| | |
+|---|---|
+| 🚀 [Quick start](docs/02_quickstart.md) | Get running in 5 steps |
+| 📋 [Samplesheet format](docs/04_inputs.md) | Column reference and examples |
+| 🔧 [Configuration](docs/04_inputs.md#configuration-file) | All config parameters |
+| 📊 [Outputs](docs/07_outputs.md) | What files are produced and how to read them |
+| 🔬 [DiffBind downstream](docs/08_diffbind.md) | Differential binding analysis |
+| 🛠 [Troubleshooting](docs/09_troubleshooting.md) | Common errors and fixes |
+
+---
+
 ## Known issues and changelog
 
 ### v3.0.4 (2026-05-27) — current
@@ -538,7 +553,7 @@ Original version supporting PE reads and two separate genome-specific batch scri
 If you use fastq2tracks in your work, please cite:
 
 ```
-Golebiewski M. fastq2tracks — ChIP-seq track-generation and QC workflow, v3.0.
+Gdula M. fastq2tracks — ChIP-seq track-generation and QC workflow, v3.0.
 https://github.com/MichalGd/fastq2tracks (2026)
 ```
 
