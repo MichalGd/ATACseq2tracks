@@ -25,7 +25,7 @@ CTRL_FLAG=""; [[ "$CTRL_BAM" != "none" && -f "$CTRL_BAM" ]] && CTRL_FLAG="-c $CT
 run_macs2() {
     local peak_type="$1" sub="$2" extra_flags="$3"
     echo "[MACS2] $SAMPLE mode=$peak_type"
-    macs2 callpeak \
+    macs3 callpeak \
         -t "$IP_BAM" $CTRL_FLAG \
         -f BAM -g "$GSIZE" -n "$SAMPLE" \
         --outdir "${OUT_DIR}/${sub}" \

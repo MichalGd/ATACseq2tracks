@@ -184,9 +184,9 @@ if is_done 10; then skip_msg 10; else
             "${R_BIN}" "${SCRIPT_DIR}/run_chipqc.R" \
                 "$SAMPLESHEET" "${OUTPUT_DIR}/filteredBams" "${OUTPUT_DIR}/peaks" \
                 "${OUTPUT_DIR}/chipqc" "$GENOME" "${THREADS_CHIPQC}" "narrow" "$F2T_CONFIG"
-            "${R_BIN}" "${SCRIPT_DIR}/run_chipqc.R" \
-                "$SAMPLESHEET" "${OUTPUT_DIR}/filteredBams" "${OUTPUT_DIR}/peaks" \
-                "${OUTPUT_DIR}/chipqc" "$GENOME" "${THREADS_CHIPQC}" "broad" "$F2T_CONFIG"
+#             "${R_BIN}" "${SCRIPT_DIR}/run_chipqc.R" \
+#                 "$SAMPLESHEET" "${OUTPUT_DIR}/filteredBams" "${OUTPUT_DIR}/peaks" \
+#                 "${OUTPUT_DIR}/chipqc" "$GENOME" "${THREADS_CHIPQC}" "broad" "$F2T_CONFIG"
         fi
     done
     mark_done 10

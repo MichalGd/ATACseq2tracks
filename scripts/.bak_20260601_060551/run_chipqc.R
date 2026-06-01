@@ -69,7 +69,6 @@ annotation <- readRDS(anno_rds); blacklist <- readRDS(blacklist_rds)
 ss <- read.csv(samplesheet_csv, stringsAsFactors = FALSE)
 ss <- ss[tolower(ss$genome) == genome_key, ]
 ss <- ss[tolower(ss$is_control) %in% c("false","0","no"), ]
-ss <- ss[!duplicated(ss$sample_id), ]   # collapse tech-rep rows
 if (nrow(ss) == 0) stop("No IP samples for genome: ", genome_key)
 
 chipqc_ss <- do.call(rbind, lapply(seq_len(nrow(ss)), function(i) {
