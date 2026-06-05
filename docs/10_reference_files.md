@@ -4,7 +4,7 @@
 
 ---
 
-This page describes how to build the reference files required by fastq2tracks that are not available for direct download as pre-built objects.
+This page describes how to build the reference files required by fastq2tracks.
 
 ---
 
@@ -15,7 +15,7 @@ This page describes how to build the reference files required by fastq2tracks th
 wget https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz
 gunzip hg38.fa.gz
 
-# Build Bowtie2 index
+# Build Bowtie2 index (16 threads, ~45 min for hg38)
 bowtie2-build --threads 16 hg38.fa /path/to/indices/hg38/hg38
 
 # Same for mm39
@@ -57,7 +57,7 @@ gunzip /path/to/ref/blacklist_mm39.bed.gz
 
 ---
 
-## Summary: all reference file paths for config.conf
+## Summary: required config.conf variables
 
 ```bash
 # Bowtie2 indices
@@ -72,21 +72,21 @@ CHROM_SIZES_MOUSE="/path/to/ref/mm39n.chrom.sizes"
 BLACKLIST_HG38="/path/to/ref/blacklist_hg38_ENCFF356LFX.bed"
 BLACKLIST_MM39="/path/to/ref/blacklist_mm39.bed"
 
-# deepTools QC threads (Step 10)
-THREADS_DEEPTOOLS=8
+# deepTools QC threads (Step 10) — required as of v3.1.0
+THREADS_DEEPTOOLS=16
 ```
+
+These are the **only** reference file variables required by the v3.1.0 pipeline.
 
 ---
 
 ## Legacy: ChIPQC RDS annotation objects
 
-> **These files are no longer required for the main pipeline.**
+> **These files are no longer required for the main pipeline as of v3.1.0.**
 > Step 10 (post-alignment QC) now uses deepTools and does not need R annotation objects.
-> The build instructions below are retained for users who run `run_chipqc.R` manually
-> outside the pipeline.
-
-These are pre-built R objects that allow ChIPQC to run without downloading annotation
-packages at runtime. Build them once and reuse across projects.
+>
+> The build instructions below are retained for users who wish to run `scripts/run_chipqc.R`
+> manually outside the pipeline (e.g. to reproduce v3.0.x QC results).
 
 ### Build script
 
@@ -155,6 +155,17 @@ Rscript build_chipqc_rds.R
 ```
 
 This takes approximately 10–20 minutes per genome depending on server speed.
+
+### Legacy config variables
+
+If running `run_chipqc.R` manually, add these to your config or pass them as arguments:
+
+```bash
+CHIPQC_ANNOTATION_HG38="/path/to/ref/AnnotationHub_cache/anno_hg38_chipqc.rds"
+CHIPQC_ANNOTATION_MM39="/path/to/ref/AnnotationHub_cache/anno_mm39_chipqc.rds"
+CHIPQC_BLACKLIST_HG38_RDS="/path/to/ref/AnnotationHub_cache/blacklist_hg38.rds"
+CHIPQC_BLACKLIST_MM39_RDS="/path/to/ref/AnnotationHub_cache/blacklist_mm39.rds"
+```
 
 ---
 

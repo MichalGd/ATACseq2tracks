@@ -20,7 +20,7 @@ conda activate fastq2tracks
 | bedtools | 2.31 | Blacklist filtering, coverage, FRiP |
 | trim_galore | 2.2.0 | Adapter trimming (SE + PE) |
 | fastqc | 0.12 | Read quality control |
-| macs2 | 2.2.9 | Peak calling |
+| macs3 | 3.0.4 | Peak calling (narrow + broad) |
 | multiqc | 1.20 | Aggregated QC HTML reports |
 | picard | 3.1 (`.jar`) | Duplicate marking |
 | bedGraphToBigWig | UCSC kent | bigwig conversion |
@@ -30,7 +30,12 @@ conda activate fastq2tracks
 | numpy | 1.24+ | Numerical arrays for karyogram plots |
 | pandas | 2.0+ | Table handling for karyogram plots |
 
-> **Note on trim_galore:** Version 2.2.0 ("Oxidized Edition") uses `--output_dir` instead of `-o`. The pipeline scripts are written for this version. Earlier versions will fail at step 2.
+> **Note on trim_galore:** Version 2.2.0 ("Oxidized Edition") uses `--output_dir` instead of
+> `-o`. The pipeline scripts are written for this version. Earlier versions will fail at step 2.
+
+> **Note on MACS3:** The pipeline calls `macs3` (not `macs2`). MACS3 v3.0.4+ is the
+> Python 3.11-compatible successor to MACS2 with an identical command-line interface.
+> Install via `pip install macs3` if not included in `environment.yml`.
 
 ---
 
@@ -63,7 +68,8 @@ Minimum R version: **4.3**
 
 ## Picard
 
-Download `picard.jar` from [Broad Institute](https://github.com/broadinstitute/picard/releases) and set its path in `config.conf`:
+Download `picard.jar` from [Broad Institute](https://github.com/broadinstitute/picard/releases)
+and set its path in `config.conf`:
 
 ```bash
 PICARD_JAR="/path/to/picard.jar"
@@ -110,8 +116,9 @@ fetchChromSizes mm39 > /path/to/mm39n.chrom.sizes
 See [Reference file preparation](10_reference_files.md) for the full download commands.
 
 > **ChIPQC RDS annotation objects** (`CHIPQC_ANNOTATION_HG38`, `CHIPQC_BLACKLIST_HG38_RDS`) are
-> no longer required for the main pipeline. See [Reference file preparation](10_reference_files.md)
-> if you need them for legacy use.
+> no longer required for the main pipeline (deprecated as of v3.1.0). See
+> [Reference file preparation](10_reference_files.md) if you need them for legacy use of
+> `run_chipqc.R`.
 
 ---
 

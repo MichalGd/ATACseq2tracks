@@ -2,7 +2,10 @@
 
 Welcome to the **fastq2tracks** documentation.
 
-fastq2tracks is a checkpoint-based, samplesheet-driven pipeline that processes raw FASTQ files from ChIP-seq, ATAC-seq, CUT&RUN, and CUT&TAG assays all the way to bigwig tracks, MACS2 peaks (narrow and broad), deepTools post-alignment QC reports, and DiffBind-ready samplesheets.
+fastq2tracks is a checkpoint-based, samplesheet-driven pipeline that processes raw FASTQ files
+from ChIP-seq, ATAC-seq, CUT&RUN, CUT&TAG, and ChIPmentation assays all the way to bigwig
+tracks, MACS3 peaks (narrow and broad), deepTools post-alignment QC reports, and DiffBind-ready
+samplesheets.
 
 ---
 
@@ -13,7 +16,7 @@ fastq2tracks is a checkpoint-based, samplesheet-driven pipeline that processes r
 | [01 — Overview](01_overview.md) | What the pipeline does, design principles, comparison with rnaseq2tracksP |
 | [02 — Quick start](02_quickstart.md) | Fastest path from installation to first run |
 | [03 — Installation](03_installation.md) | Conda environment, R packages, reference files |
-| [04 — Input files](04_inputs.md) | Samplesheet format, column reference, config file parameters |
+| [04 — Input files](04_inputs.md) | Samplesheet format (17 columns), column reference, config parameters |
 | [05 — Running the pipeline](05_running.md) | Launch commands, monitoring, resume, partial reruns |
 | [06 — Pipeline steps](06_pipeline_steps.md) | Every step explained with inputs, outputs, and key logic |
 | [07 — Outputs](07_outputs.md) | Output directory tree, file naming conventions, how to read results |
@@ -33,6 +36,20 @@ fastq2tracks is a checkpoint-based, samplesheet-driven pipeline that processes r
 - **Something failed?** See [Troubleshooting](09_troubleshooting.md)
 - **Pipeline ran — what do I have?** See [Outputs](07_outputs.md)
 - **Understanding QC outputs?** See [Post-alignment QC](12_post_alignment_qc.md)
+- **Running differential binding?** See [Downstream: DiffBind](08_diffbind.md)
+
+---
+
+## Version notes
+
+Current version: **v3.1.0** — See [CHANGELOG](../CHANGELOG.md) for full history.
+
+**Upgrading from v3.0.x?** Key breaking changes in v3.1.0:
+- The `chipqc_annotation` samplesheet column has been **removed** (samplesheet is now 17 columns)
+- `THREADS_DEEPTOOLS` must be added to `config.conf`
+- ChIPQC replaced by deepTools in Step 10 — R/Bioconductor no longer required for QC
+
+See [CHANGELOG](../CHANGELOG.md) for the full upgrade checklist.
 
 ---
 
