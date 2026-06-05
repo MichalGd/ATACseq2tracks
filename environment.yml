@@ -4,21 +4,43 @@ channels:
   - conda-forge
   - defaults
 dependencies:
+  # ── Core alignment & processing ───────────────────────────────────────────
   - python=3.11
   - bowtie2>=2.5
   - samtools>=1.17
   - bedtools>=2.31
   - trim-galore>=0.6.10
   - fastqc>=0.12
-  - macs2>=2.2.9
-  - multiqc>=1.18
+  - picard>=3.1
   - ucsc-bedgraphtobigwig
+
+  # ── Peak calling ──────────────────────────────────────────────────────────
+  # Note: package is named macs3 in conda but invoked as "macs2" in the pipeline
+  # macs3>=3.0 is backward-compatible with macs2 CLI flags used in macs2_peaks.sh
+  - macs3>=3.0
+
+  # ── QC & reporting ───────────────────────────────────────────────────────
+  - multiqc>=1.18
+
+  # ── deepTools — NEW: required for Step 10 post_alignment_qc_batch.sh ─────
+  - deeptools>=3.5
+
+  # ── Python plotting — NEW: required for plot_chrom_coverage.py ───────────
+  - matplotlib>=3.7
+  - numpy>=1.24
+  - pandas>=2.0
+
+  # ── R base ───────────────────────────────────────────────────────────────
   - r-base>=4.3
+
+  # ── Bioconductor — kept for DiffBind (optional downstream use) ───────────
+  # ChIPQC is kept for backward compatibility but no longer used in Step 10
   - bioconductor-chipqc
   - bioconductor-diffbind
   - bioconductor-biocparallel
   - bioconductor-genomicalignments
   - bioconductor-rtracklayer
+
+  # ── R packages ───────────────────────────────────────────────────────────
   - r-ggplot2
   - r-dplyr
-  - picard>=3.1
