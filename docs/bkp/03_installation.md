@@ -17,18 +17,14 @@ conda activate fastq2tracks
 |---|---|---|
 | bowtie2 | 2.5 | Alignment |
 | samtools | 1.18 | BAM sorting, indexing, merging |
-| bedtools | 2.31 | Blacklist filtering, coverage, FRiP |
+| bedtools | 2.31 | Blacklist filtering, coverage |
 | trim_galore | 2.2.0 | Adapter trimming (SE + PE) |
 | fastqc | 0.12 | Read quality control |
 | macs2 | 2.2.9 | Peak calling |
 | multiqc | 1.20 | Aggregated QC HTML reports |
 | picard | 3.1 (`.jar`) | Duplicate marking |
 | bedGraphToBigWig | UCSC kent | bigwig conversion |
-| deeptools | 3.5+ | Post-alignment QC (Step 10) |
-| python3 | 3.9+ | Samplesheet validation, karyogram plots |
-| matplotlib | 3.7+ | Chromosome coverage plots (Step 10) |
-| numpy | 1.24+ | Numerical arrays for karyogram plots |
-| pandas | 2.0+ | Table handling for karyogram plots |
+| python3 | 3.9+ | Samplesheet validation |
 
 > **Note on trim_galore:** Version 2.2.0 ("Oxidized Edition") uses `--output_dir` instead of `-o`. The pipeline scripts are written for this version. Earlier versions will fail at step 2.
 
@@ -36,15 +32,15 @@ conda activate fastq2tracks
 
 ## R packages
 
-R and Bioconductor are **only required for DiffBind** (Step 11). They are no longer needed for
-the QC step (Step 10), which now uses deepTools.
+R and Bioconductor are **not** managed by conda and must be installed separately.
 
 ```r
 # Install Bioconductor manager if needed
 if (!require("BiocManager")) install.packages("BiocManager")
 
-# DiffBind and its dependencies
+# Core packages
 BiocManager::install(c(
+    "ChIPQC",
     "DiffBind",
     "BiocParallel",
     "GenomicAlignments",
@@ -56,8 +52,6 @@ install.packages(c("ggplot2", "dplyr"))
 ```
 
 Minimum R version: **4.3**
-
-> If you do not plan to run DiffBind, R and Bioconductor are not required at all.
 
 ---
 
@@ -107,11 +101,16 @@ fetchChromSizes mm39 > /path/to/mm39n.chrom.sizes
 | hg38 | ENCODE ENCFF356LFX | `wget https://www.encodeproject.org/files/ENCFF356LFX/@@download/ENCFF356LFX.bed.gz` |
 | mm39 | Boyle lab | [github.com/Boyle-Lab/Blacklist](https://github.com/Boyle-Lab/Blacklist) |
 
-See [Reference file preparation](10_reference_files.md) for the full download commands.
+### ChIPQC annotation and blacklist RDS objects
 
-> **ChIPQC RDS annotation objects** (`CHIPQC_ANNOTATION_HG38`, `CHIPQC_BLACKLIST_HG38_RDS`) are
-> no longer required for the main pipeline. See [Reference file preparation](10_reference_files.md)
-> if you need them for legacy use.
+These are R objects required by `run_chipqc.R`. See [Reference file preparation](10_reference_files.md) for the complete build script.
+
+```bash
+CHIPQC_ANNOTATION_HG38="/path/to/anno_hg38_chipqc.rds"
+CHIPQC_ANNOTATION_MM39="/path/to/anno_mm39_chipqc.rds"
+CHIPQC_BLACKLIST_HG38_RDS="/path/to/blacklist_hg38.rds"
+CHIPQC_BLACKLIST_MM39_RDS="/path/to/blacklist_mm39.rds"
+```
 
 ---
 

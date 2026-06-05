@@ -13,10 +13,10 @@ Runs before any analysis. Checks:
 - Config file exists and sources without error
 - All required scripts are present and executable
 - Samplesheet passes schema validation (`validate_samplesheet.py`)
-- All required tools are in `PATH` (including `deeptools`, `python3`)
+- All required tools are in `PATH`
 - `picard.jar` and `bedGraphToBigWig` are present
-- All reference files (indices, chrom sizes, blacklists) exist
-- Required Python packages are importable (`matplotlib`, `pandas`, `numpy`)
+- All reference files (indices, chrom sizes, blacklists, RDS objects) exist
+- Required R packages are installed
 - At least 50 GB disk space available in `OUTPUT_DIR`
 
 A failure at step 0 stops the pipeline before any files are written.
@@ -89,7 +89,6 @@ Output naming: `dedupBams/<sample_id>_bioR<replicate>_dedup.bam`
 > The `_bioR<N>` suffix encodes the biological replicate number from the samplesheet. All downstream scripts look up BAMs using this naming pattern.
 
 - MultiQC summary: `multiQC/multiQC_deduplication/`
-- Duplication metrics (`*_dup_metrics.txt`) are **reused by Step 10** — no re-deduplication is needed.
 
 ---
 
@@ -150,50 +149,19 @@ Both always produce **narrow** (`narrowPeak`) **and broad** (`broadPeak`) output
 
 ---
 
-## Step 10 — Post-alignment QC (deepTools)
+## Step 10 — ChIPQC
 
-**Scripts:** `scripts/post_alignment_qc_batch.sh` + `scripts/plot_chrom_coverage.py`
+**Script:** `scripts/run_chipqc.R`
 
-Runs a comprehensive post-alignment quality control module based on deepTools and standard
-command-line tools. This replaces the legacy ChIPQC module.
+Runs the Bioconductor `ChIPQC` package to assess ChIP-seq quality.
 
-The module runs in four sequential phases:
+- Called twice per genome: once for narrow peaks, once for broad peaks
+- Uses pre-built annotation RDS (`CHIPQC_ANNOTATION_HG38/MM39`) and blacklist RDS
+- Parallelised via `BiocParallel::MulticoreParam` with `THREADS_CHIPQC` workers
+- Outputs per run: HTML report, `chipqc_samplesheet.csv`, `chipqc_metrics_summary.csv`, `chipqc_frip.csv`
+- Output directory: `chipqc/ChIPQC_<genome>_<narrow|broad>/`
 
-**Phase 1 — Per-sample metrics**
-- Total aligned reads (`samtools view -c`)
-- Mitochondrial read fraction (`samtools idxstats`)
-- Duplicate rate (read from pre-computed Picard metrics)
-- Peak counts (narrow and broad per replicate)
-- FRiP — Fraction of Reads in Peaks (`bedtools intersect`); skipped gracefully if zero peaks
-
-**Phase 2 — Chromosome-level karyogram**
-- Per-sample chromosome coverage barcode plots replicating the ChIPQC "ChIP Peaks over Chromosomes" panel
-- One row per chromosome in cytogenetic order; X-axis = chromosomal position in bp
-- Signal from `bamCoverage --binSize 100000 --normalizeUsing RPKM` (bedtools fallback available)
-- Per-sample PNGs + multi-sample panel for direct comparison
-
-**Phase 3 — Genome-wide deepTools QC**
-- `plotFingerprint` (Lorenz curve) — IP enrichment vs input
-- `multiBamSummary bins` + `plotCorrelation` — Spearman correlation heatmap (10 kb bins)
-- `plotPCA` — genome-wide PCA
-
-**Phase 4 — Consensus peaks and peak-centric QC**
-- Merged consensus peak set from all per-replicate peak files
-- `multiBamSummary BED-file` over consensus peaks + `plotCorrelation` + `plotPCA`
-- `computeMatrix reference-point` + `plotHeatmap` + `plotProfile` over consensus peaks
-- FRiP over consensus peak set for all samples
-
-> **Zero-peak safety:** samples with zero peaks are retained in all summary tables and
-> flagged `NO_PEAKS`. They are skipped only for peak-centric steps, not for fingerprint,
-> bins-level correlation, or PCA.
-
-Config parameter required:
-```bash
-THREADS_DEEPTOOLS=8   # set to available CPUs / 2 as a reasonable default
-```
-
-Output directory: `qc_post_alignment/`
-See [Post-alignment QC (deepTools)](12_post_alignment_qc.md) for full documentation.
+> Key metric to check: **FRiP** (Fraction of Reads in Peaks). Values > 0.01 are generally acceptable; > 0.05 is good for most marks.
 
 ---
 
@@ -230,7 +198,7 @@ Generates a UCSC Genome Browser trackDb text file pointing to the bigwig files.
 
 Generates a summary HTML report of the full pipeline run.
 
-- Collects output counts, MultiQC paths, QC summary table, and DiffBind CSV paths
+- Collects output counts, MultiQC paths, ChIPQC paths, and DiffBind CSV paths
 - Output: `reports/pipeline_report_<YYYYMMDD>.html`
 
 ---

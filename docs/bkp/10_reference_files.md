@@ -57,36 +57,9 @@ gunzip /path/to/ref/blacklist_mm39.bed.gz
 
 ---
 
-## Summary: all reference file paths for config.conf
+## ChIPQC annotation and blacklist RDS objects
 
-```bash
-# Bowtie2 indices
-INDEX_HG38="/path/to/indices/hg38/hg38"
-INDEX_MM39="/path/to/indices/mm39/mm39"
-
-# Chromosome sizes
-CHROM_SIZES_HUMAN="/path/to/ref/hs38n.chrom.sizes"
-CHROM_SIZES_MOUSE="/path/to/ref/mm39n.chrom.sizes"
-
-# Blacklist BED files
-BLACKLIST_HG38="/path/to/ref/blacklist_hg38_ENCFF356LFX.bed"
-BLACKLIST_MM39="/path/to/ref/blacklist_mm39.bed"
-
-# deepTools QC threads (Step 10)
-THREADS_DEEPTOOLS=8
-```
-
----
-
-## Legacy: ChIPQC RDS annotation objects
-
-> **These files are no longer required for the main pipeline.**
-> Step 10 (post-alignment QC) now uses deepTools and does not need R annotation objects.
-> The build instructions below are retained for users who run `run_chipqc.R` manually
-> outside the pipeline.
-
-These are pre-built R objects that allow ChIPQC to run without downloading annotation
-packages at runtime. Build them once and reuse across projects.
+These are pre-built R objects that allow ChIPQC to run without downloading annotation packages at runtime. Build them once and reuse across projects.
 
 ### Build script
 
@@ -106,12 +79,14 @@ dir.create(OUT_DIR, showWarnings = FALSE, recursive = TRUE)
 # ── hg38 ──────────────────────────────────────────────────────────────────────
 message("Building hg38 annotation...")
 
+# Install TxDb if not present
 if (!requireNamespace("TxDb.Hsapiens.UCSC.hg38.knownGene", quietly = TRUE))
     BiocManager::install("TxDb.Hsapiens.UCSC.hg38.knownGene")
 
 library(TxDb.Hsapiens.UCSC.hg38.knownGene)
 txdb_hg38 <- TxDb.Hsapiens.UCSC.hg38.knownGene
 
+# Build annotation for ChIPQC (GRangesList of features)
 anno_hg38 <- ChIPQC:::GetAnnotation(
     annotation  = txdb_hg38,
     chromosomes = paste0("chr", c(1:22, "X", "Y"))
@@ -119,6 +94,7 @@ anno_hg38 <- ChIPQC:::GetAnnotation(
 saveRDS(anno_hg38, file.path(OUT_DIR, "anno_hg38_chipqc.rds"))
 message("  Saved: anno_hg38_chipqc.rds")
 
+# Convert blacklist BED to GRanges RDS
 bl_hg38 <- rtracklayer::import("/path/to/ref/blacklist_hg38_ENCFF356LFX.bed",
                                 format = "BED")
 saveRDS(bl_hg38, file.path(OUT_DIR, "blacklist_hg38.rds"))
@@ -145,7 +121,11 @@ bl_mm39 <- rtracklayer::import("/path/to/ref/blacklist_mm39.bed",
 saveRDS(bl_mm39, file.path(OUT_DIR, "blacklist_mm39.rds"))
 message("  Saved: blacklist_mm39.rds")
 
-message("Done.")
+message("Done. Set these paths in config.conf:")
+message("  CHIPQC_ANNOTATION_HG38=", file.path(OUT_DIR, "anno_hg38_chipqc.rds"))
+message("  CHIPQC_ANNOTATION_MM39=", file.path(OUT_DIR, "anno_mm39_chipqc.rds"))
+message("  CHIPQC_BLACKLIST_HG38_RDS=", file.path(OUT_DIR, "blacklist_hg38.rds"))
+message("  CHIPQC_BLACKLIST_MM39_RDS=", file.path(OUT_DIR, "blacklist_mm39.rds"))
 ```
 
 Run:
@@ -155,6 +135,30 @@ Rscript build_chipqc_rds.R
 ```
 
 This takes approximately 10–20 minutes per genome depending on server speed.
+
+---
+
+## Summary: all reference file paths for config.conf
+
+```bash
+# Bowtie2 indices
+INDEX_HG38="/path/to/indices/hg38/hg38"
+INDEX_MM39="/path/to/indices/mm39/mm39"
+
+# Chromosome sizes
+CHROM_SIZES_HUMAN="/path/to/ref/hs38n.chrom.sizes"
+CHROM_SIZES_MOUSE="/path/to/ref/mm39n.chrom.sizes"
+
+# Blacklist BED files
+BLACKLIST_HG38="/path/to/ref/blacklist_hg38_ENCFF356LFX.bed"
+BLACKLIST_MM39="/path/to/ref/blacklist_mm39.bed"
+
+# ChIPQC RDS objects
+CHIPQC_ANNOTATION_HG38="/path/to/ref/AnnotationHub_cache/anno_hg38_chipqc.rds"
+CHIPQC_ANNOTATION_MM39="/path/to/ref/AnnotationHub_cache/anno_mm39_chipqc.rds"
+CHIPQC_BLACKLIST_HG38_RDS="/path/to/ref/AnnotationHub_cache/blacklist_hg38.rds"
+CHIPQC_BLACKLIST_MM39_RDS="/path/to/ref/AnnotationHub_cache/blacklist_mm39.rds"
+```
 
 ---
 

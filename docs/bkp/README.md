@@ -2,7 +2,7 @@
 
 Welcome to the **fastq2tracks** documentation.
 
-fastq2tracks is a checkpoint-based, samplesheet-driven pipeline that processes raw FASTQ files from ChIP-seq, ATAC-seq, CUT&RUN, and CUT&TAG assays all the way to bigwig tracks, MACS2 peaks (narrow and broad), deepTools post-alignment QC reports, and DiffBind-ready samplesheets.
+fastq2tracks is a checkpoint-based, samplesheet-driven pipeline that processes raw FASTQ files from ChIP-seq, ATAC-seq, CUT&RUN, and CUT&TAG assays all the way to bigwig tracks, MACS2 peaks (narrow and broad), ChIPQC quality reports, and DiffBind-ready samplesheets.
 
 ---
 
@@ -19,9 +19,7 @@ fastq2tracks is a checkpoint-based, samplesheet-driven pipeline that processes r
 | [07 — Outputs](07_outputs.md) | Output directory tree, file naming conventions, how to read results |
 | [08 — Downstream: DiffBind](08_diffbind.md) | Using pipeline outputs for differential binding analysis |
 | [09 — Troubleshooting](09_troubleshooting.md) | Common errors and fixes, all v3.0.4 bugs documented |
-| [10 — Reference file preparation](10_reference_files.md) | Building Bowtie2 indices, blacklist BED files, and chromosome sizes |
-| [11 — Blacklist filtering](11_blacklist_filtering.md) | Blacklist strategy, ENCODE BED files, per-sample column |
-| [12 — Post-alignment QC (deepTools)](12_post_alignment_qc.md) | deepTools QC module: FRiP, fingerprint, PCA, correlation, karyogram |
+| [10 — Reference file preparation](10_reference_files.md) | Building ChIPQC RDS annotations and blacklist objects |
 
 ---
 
@@ -32,7 +30,6 @@ fastq2tracks is a checkpoint-based, samplesheet-driven pipeline that processes r
 - **Preparing your samplesheet?** See [Input files](04_inputs.md)
 - **Something failed?** See [Troubleshooting](09_troubleshooting.md)
 - **Pipeline ran — what do I have?** See [Outputs](07_outputs.md)
-- **Understanding QC outputs?** See [Post-alignment QC](12_post_alignment_qc.md)
 
 ---
 

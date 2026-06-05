@@ -10,7 +10,7 @@
 
 - Normalised **bigwig tracks** for genome browsers (individual replicates and merged)
 - **MACS2 peaks** in both narrow and broad format for every IP sample
-- **deepTools post-alignment QC** with FRiP scores, fingerprint plots, PCA, correlation heatmaps, and chromosome-level karyogram plots
+- **ChIPQC** quality reports with FRiP scores and coverage metrics
 - **DiffBind-ready samplesheets** for differential binding analysis
 
 A single **CSV samplesheet** describes every sample. A single **config file** sets all paths and parameters. The pipeline runs as a single bash command and can be safely interrupted and resumed — each step writes a checkpoint file, and completed steps are skipped on rerun.
@@ -25,7 +25,6 @@ A single **CSV samplesheet** describes every sample. A single **config file** se
 | ATAC-seq | Supported. Use `macs2_mode=both`; adjust fragment size in config. |
 | CUT&RUN | Supported. Typically narrow peaks only. |
 | CUT&TAG | Supported. Similar to CUT&RUN. |
-| ChIPmentation | Supported. Expect higher duplication rates. |
 
 ---
 
@@ -33,35 +32,52 @@ A single **CSV samplesheet** describes every sample. A single **config file** se
 
 ```mermaid
 flowchart TD
-    A([Raw FASTQ files\nSE or PE]) --> S0[Step 0 — Pre-flight\nsmoke_test.sh]
-    S0 --> S1[Step 1 — FastQC raw\nfastqc_batch.sh]
-    S1 --> S2[Step 2 — Adapter trimming\ntrimgalore_batch.sh]
-    S2 --> S3[Step 3 — FastQC trimmed\nfastqc_batch.sh]
-    S3 --> S4[Step 4 — Alignment\nbowtie2_batch.sh]
-    S4 --> S5[Step 5 — Deduplication\npicard_dedup_batch.sh]
-    S5 --> S6[Step 6 — Blacklist filtering\nblacklist_filter_batch.sh]
-    S6 --> S7[Step 7 — Coverage tracks\ngenomecoverage_batch.sh]
-    S6 --> S8[Step 8 — Merged tracks\nmerge_replicates.sh]
-    S6 --> S9[Step 9 — Peak calling\nmacs2_batch.sh]
-    S7 --> OUT1[(bigwig/\nbedGraph/)]
+    A([Raw FASTQ files
+SE or PE]) --> S0[Step 0 — Pre-flight
+smoke_test.sh]
+    S0 --> S1[Step 1 — FastQC raw
+fastqc_batch.sh]
+    S1 --> S2[Step 2 — Adapter trimming
+trimgalore_batch.sh]
+    S2 --> S3[Step 3 — FastQC trimmed
+fastqc_batch.sh]
+    S3 --> S4[Step 4 — Alignment
+bowtie2_batch.sh]
+    S4 --> S5[Step 5 — Deduplication
+picard_dedup_batch.sh]
+    S5 --> S6[Step 6 — Blacklist filtering
+blacklist_filter_batch.sh]
+    S6 --> S7[Step 7 — Coverage tracks
+genomecoverage_batch.sh]
+    S6 --> S8[Step 8 — Merged tracks
+merge_replicates.sh]
+    S6 --> S9[Step 9 — Peak calling
+macs2_batch.sh]
+    S7 --> OUT1[(bigwig/
+bedGraph/)]
     S8 --> OUT2[(bigwig_merged/)]
-    S9 --> OUT3[(peaks/\nnarrow + broad)]
-    OUT3 --> S10[Step 10 — Post-alignment QC\npost_alignment_qc_batch.sh]
+    S9 --> OUT3[(peaks/
+narrow + broad)]
+    OUT3 --> S10[Step 10 — ChIPQC
+run_chipqc.R]
     S6 --> S10
-    OUT1 --> S10
-    OUT3 --> S11[Step 11 — DiffBind prep\nprepare_diffbind.R]
+    OUT3 --> S11[Step 11 — DiffBind prep
+prepare_diffbind.R]
     S6 --> S11
-    OUT1 --> S12[Step 12 — UCSC tracks\ncreate_ucsc_tracks.sh]
+    OUT1 --> S12[Step 12 — UCSC tracks
+create_ucsc_tracks.sh]
     OUT2 --> S12
-    S10 --> S13[Step 13 — Report\ngenerate_pipeline_report.sh]
+    S10 --> S13[Step 13 — Report
+generate_pipeline_report.sh]
     S11 --> S13
     S12 --> S13
-    S13 --> FINAL([HTML report\nDiffBind CSVs\nUCSC trackdb.txt])
+    S13 --> FINAL([HTML report
+DiffBind CSVs
+UCSC trackdb.txt])
 
     style A fill:#d4edda,stroke:#28a745
     style FINAL fill:#cce5ff,stroke:#004085
     style S0 fill:#fff3cd,stroke:#856404
-    style S10 fill:#e8d5f5,stroke:#6f42c1
 ```
 
 ---
@@ -90,7 +106,7 @@ Both pipelines share the same samplesheet-driven, config-file-parameterised, che
 | Aligner | Bowtie2 (gapped-free) | STAR / HISAT2 (splice-aware) |
 | Duplicate removal | Picard MarkDuplicates | Optional |
 | Peak calling | MACS2 narrow + broad | — |
-| QC module | deepTools (FRiP, fingerprint, PCA, correlation, karyogram) | RSeQC / MultiQC |
+| QC module | ChIPQC (FRiP, TSS enrichment) | RSeQC / MultiQC |
 | Track normalisation | Library-size / spike-in | TPM / CPM |
 | Downstream prep | DiffBind samplesheets | DESeq2 / edgeR count matrices |
 | Genome support | hg38, mm39 | hg38, mm39 |

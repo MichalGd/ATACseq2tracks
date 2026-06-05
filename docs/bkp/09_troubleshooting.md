@@ -103,58 +103,14 @@ SKIP <sample_id> — dedup BAM not found: .../dedupBams/<sample_id>_dedup.bam
 
 ---
 
-### Step 10 — `THREADS_DEEPTOOLS: unbound variable`
+### Step 10 — ChIPQC: "No valid samples remain after BAM check"
 
 **Symptom:**
 ```
-/scripts/post_alignment_qc_batch.sh: line XX: THREADS_DEEPTOOLS: unbound variable
+Error: No valid samples remain after BAM check.
 ```
-**Cause:** `THREADS_DEEPTOOLS` is missing from your `config.conf`.
-**Fix:** Add the following line to `config.conf`:
-```bash
-THREADS_DEEPTOOLS=8
-```
-
----
-
-### Step 10 — `bamCoverage: error: the following arguments are required`
-
-**Symptom:**
-```
-bamCoverage: error: the following arguments are required: --bam/-b
-```
-**Cause:** deepTools version < 3.5 uses a different argument syntax for `bamCoverage`.
-**Fix:** Update deepTools to >= 3.5:
-```bash
-conda activate fastq2tracks
-mamba install deeptools>=3.5
-```
-
----
-
-### Step 10 — Karyogram plot fails ("No module named matplotlib")
-
-**Symptom:**
-```
-ModuleNotFoundError: No module named 'matplotlib'
-```
-**Cause:** `matplotlib`, `numpy`, or `pandas` are not installed in the active conda environment.
-**Fix:**
-```bash
-conda activate fastq2tracks
-mamba install matplotlib numpy pandas
-```
-
----
-
-### Step 10 — All samples show `NO_PEAKS` in QC summary
-
-**Symptom:** `qc_post_alignment/tables/qc_summary.tsv` shows `NO_PEAKS` for every sample; fingerprint and bins-level QC still run.
-**Cause:** Peak calling (Step 9) failed or produced empty peak files, or peak files are in an unexpected location.
-**Fix:**
-1. Check `peaks/per_replicate/` to confirm `.narrowPeak` and `.broadPeak` files exist and are non-empty.
-2. If peak calling failed, delete `step9.done` and rerun.
-3. If peaks exist but paths are wrong, check the `KEY` construction logic in `post_alignment_qc_batch.sh`.
+**Cause:** BAM lookup in `run_chipqc.R` used bare `replicate` variable instead of `ss$replicate[i]`. Fixed in v3.0.4.
+**Fix:** Use the v3.0.4 `run_chipqc.R`.
 
 ---
 
@@ -180,11 +136,11 @@ multiqc | No analysis results found.
 
 ---
 
-### R: package not found (DiffBind)
+### R: package not found
 
 **Symptom:**
 ```
-Error in library(DiffBind) : there is no package called 'DiffBind'
+Error in library(ChIPQC) : there is no package called 'ChIPQC'
 ```
 **Fix:** Install missing packages — see [Installation](03_installation.md#r-packages).
 
@@ -212,8 +168,6 @@ Pre-flight check (step 0) requires 50 GB free. For 30+ samples with PE reads, bu
 - [ ] `macs2_mode=none` for all `is_control=TRUE` rows
 - [ ] `tech_replicate` is `1` for samples with only one sequencing run
 - [ ] No trailing spaces or Windows line endings in the samplesheet (use `dos2unix` if in doubt)
-- [ ] `THREADS_DEEPTOOLS` is set in `config.conf`
-- [ ] deepTools >= 3.5 is installed in the conda environment
 
 ---
 

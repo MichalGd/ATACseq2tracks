@@ -19,7 +19,7 @@ conda activate fastq2tracks
 chmod +x fastq2tracks.sh scripts/*.sh scripts/*.py scripts/*.R
 ```
 
-> **R packages** (DiffBind only) must be installed separately — see [Installation](03_installation.md#r-packages).
+> **R packages** must be installed separately — see [Installation](03_installation.md#r-packages).
 
 ---
 
@@ -44,15 +44,10 @@ OUTPUT_DIR="/path/to/my_project/analysis/"
 INDEX_HG38="/path/to/bowtie2_index/hg38"
 CHROM_SIZES_HUMAN="/path/to/hs38n.chrom.sizes"
 BLACKLIST_HG38="/path/to/blacklist_hg38_ENCFF356LFX.bed"
+CHIPQC_ANNOTATION_HG38="/path/to/anno_hg38_chipqc.rds"
+CHIPQC_BLACKLIST_HG38_RDS="/path/to/blacklist_hg38.rds"
 PICARD_JAR="/path/to/picard.jar"
-
-# deepTools QC threads (Step 10)
-THREADS_DEEPTOOLS=8
 ```
-
-> The ChIPQC RDS annotation variables (`CHIPQC_ANNOTATION_HG38`, `CHIPQC_BLACKLIST_HG38_RDS`) are
-> **no longer required** for the QC step. They are only needed if you run the legacy
-> `run_chipqc.R` script manually outside the pipeline.
 
 ---
 
@@ -63,7 +58,7 @@ Edit `/path/to/my_project/config/samplesheet.csv`. Minimum required columns:
 ```
 sample_id, fastq_1, fastq_2, layout, genome, assay, factor, condition, treatment,
 cell_type, replicate, tech_replicate, is_control, control_id, macs2_mode,
-blacklist, output_prefix
+blacklist, chipqc_annotation, output_prefix
 ```
 
 See [Input files](04_inputs.md) for the full column reference and example rows.
@@ -101,7 +96,7 @@ tail -f /path/to/my_project/run.log
 | bigwig tracks | `analysis/bigwig/` |
 | Merged tracks | `analysis/bigwig_merged/` |
 | Peaks (narrow + broad) | `analysis/peaks/per_replicate/` |
-| Post-alignment QC | `analysis/qc_post_alignment/` |
+| ChIPQC reports | `analysis/chipqc/` |
 | DiffBind samplesheets | `analysis/diffbind/` |
 | HTML pipeline report | `analysis/reports/pipeline_report_<date>.html` |
 
