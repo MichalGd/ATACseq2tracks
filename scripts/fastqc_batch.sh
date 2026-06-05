@@ -29,7 +29,22 @@ wait_slot() {
         pids=("${new[@]+"${new[@]}"}"); sleep 2
     done
 }
-mapfile -t all_files < <(find "$IN" -maxdepth 1 -type f \( -name "*.fq.gz" -o -name "*.fastq.gz" \) | sort)
+# Collect only FASTQs referenced in the samplesheet
+SAMPLESHEET_FOR_FQC="${SAMPLESHEET:-}"
+if [[ -n "$SAMPLESHEET_FOR_FQC" && -f "$SAMPLESHEET_FOR_FQC" ]]; then
+    mapfile -t all_files < <(
+        tail -n +2 "$SAMPLESHEET_FOR_FQC" | awk -F',' '{
+            gsub(/"/, "", $2); gsub(/"/, "", $3)
+            if ($2 != "") print $2
+            if ($3 != "") print $3
+        }' | sort -u | while read -r fq; do
+            [[ -f "$fq" ]] && echo "$fq"
+        done
+    )
+else
+    # Fallback: glob entire directory (original behaviour)
+    mapfile -t all_files < <(find "$IN" -maxdepth 1 -type f \( -name "*.fq.gz" -o -name "*.fastq.gz" \) | sort)
+fi
 log "=== FastQC batch: ${#all_files[@]} files ==="
 for fq in "${all_files[@]}"; do
     base=$(basename "$fq" .fq.gz); base=${base%.fastq.gz}

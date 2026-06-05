@@ -8,32 +8,6 @@ suppressPackageStartupMessages({
     library(dplyr); library(ggplot2)
 })
 
-# ---- DiffBind 3.16 / ChIPQC 1.42 compatibility shim ---------------------
-# DiffBind 3.16 changed $class row order and dropped rownames.
-# ChIPQC 1.42 expects named rows including "bamRead" and "bamControl".
-# This wrapper restores correct rownames before calling ChIPQC().
-DIFFBIND_CLASS_ROWNAMES_3.16 <- c(
-    "ID","Tissue","Factor","Condition","isControl",
-    "PeakCaller","Peaks","bamControl","Replicate",
-    "bamRead","bamReadControl","Treatment","ControlID"
-)
-ChIPQC_compat <- function(experiment, ...) {
-    if (is.data.frame(experiment) || is.character(experiment)) {
-        experiment <- DiffBind::dba(sampleSheet=experiment, peakCaller="bed")
-    }
-    if (is.null(rownames(experiment$class)) &&
-        nrow(experiment$class) == length(DIFFBIND_CLASS_ROWNAMES_3.16)) {
-        rownames(experiment$class) <- DIFFBIND_CLASS_ROWNAMES_3.16
-    }
-    mapQCth <- list(...)$mapQCth
-    if (is.null(mapQCth)) mapQCth <- 15L
-    experiment$config$mapQCth <- mapQCth
-    ChIPQC::ChIPQC(experiment, ...)
-}
-message("ChIPQC/DiffBind 3.16 compatibility shim loaded.")
-# ---- end shim -----------------------------------------------------------
-
-
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) < 5) stop(
     "Usage: Rscript run_chipqc.R <ss.csv> <bamDir> <peaksDir> <outDir> <genome> [workers] [peakType] [config.conf]")
@@ -203,7 +177,7 @@ if (!is.null(blacklist_arg) && inherits(blacklist_arg, "GRanges")) {
 
 # ---- Run ChIPQC -------------------------------------------------------------
 experiment <- tryCatch(
-    ChIPQC_compat(chipqc_ss,
+    ChIPQC(chipqc_ss,
            annotation  = anno_arg,
            blacklist   = blacklist_arg,
            chromosomes = canonical_chroms,

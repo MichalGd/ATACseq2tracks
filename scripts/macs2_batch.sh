@@ -77,4 +77,15 @@ for GRP in "${!grp_bams[@]}"; do
     "both" "${grp_genome[$GRP]}" "$GRP_NAME" >> "$LOG" 2>&1) &
 done
 wait
+# Verify every expected peak file was produced
+n_warn=0
+for sid in "${!ip_bams[@]}"; do
+    [[ "${ip_modes[$sid],,}" == "none" ]] && continue
+    OUT="${PEAKS_DIR}/per_replicate/${sid}"
+    if [[ ! -f "${OUT}/narrow/${sid}_peaks.narrowPeak" && ! -f "${OUT}/broad/${sid}_peaks.broadPeak" ]]; then
+        log "ERROR: no peak file produced for ${sid}"
+        (( n_warn++ )) || true
+    fi
+done
+[[ $n_warn -gt 0 ]] && { log "FATAL: $n_warn sample(s) produced no peaks — aborting step"; exit 1; }
 log "=== MACS2 batch complete ==="

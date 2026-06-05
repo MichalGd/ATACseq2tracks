@@ -44,5 +44,9 @@ tail -n +2 "$SAMPLESHEET" | while IFS=',' read -r sample_id fastq_1 fastq_2 layo
   (bash "$(dirname "$0")/genomecoverage_single.sh" "$BAM" "$genome" "$OUT_DIR" >> "$LOG" 2>&1) &
   pids+=($!); log "STARTED: $KEY"
 done
-for p in "${pids[@]+"${pids[@]}"}"; do wait "$p" || true; done
+FAIL=0
+for p in "${pids[@]+"${pids[@]}"}"; do
+    wait "$p" || { log "ERROR: coverage job failed (pid $p)"; FAIL=1; }
+done
+[[ $FAIL -eq 1 ]] && { log "FATAL: one or more coverage jobs failed"; exit 1; }
 log "=== Coverage batch complete ==="

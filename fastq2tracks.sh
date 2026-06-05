@@ -80,6 +80,7 @@ mkdir -p \
     "${OUTPUT_DIR}/peaks/per_replicate" \
     "${OUTPUT_DIR}/peaks/pooled" \
     "${OUTPUT_DIR}/chipqc" \
+    "${OUTPUT_DIR}/qc_post_alignment" \
     "${OUTPUT_DIR}/diffbind" \
     "${OUTPUT_DIR}/reports"
 
@@ -175,23 +176,18 @@ if is_done 9; then skip_msg 9; else
         "$SAMPLESHEET" "${OUTPUT_DIR}/filteredBams" "${OUTPUT_DIR}/peaks"
     mark_done 9
 fi
-
-# ── Step 10: ChIPQC ───────────────────────────────────────────────────────────
+# ── Step 10: Post-alignment QC (deepTools — replaces ChIPQC) ─────────────────
 if is_done 10; then skip_msg 10; else
-    echo "=== [10] ChIPQC ==="
-    for GENOME in hg38 mm39; do
-        if grep -q ",$GENOME," "$SAMPLESHEET"; then
-            "${R_BIN}" "${SCRIPT_DIR}/run_chipqc.R" \
-                "$SAMPLESHEET" "${OUTPUT_DIR}/filteredBams" "${OUTPUT_DIR}/peaks" \
-                "${OUTPUT_DIR}/chipqc" "$GENOME" "${THREADS_CHIPQC}" "narrow" "$F2T_CONFIG"
-#             "${R_BIN}" "${SCRIPT_DIR}/run_chipqc.R" \
-#                 "$SAMPLESHEET" "${OUTPUT_DIR}/filteredBams" "${OUTPUT_DIR}/peaks" \
-#                 "${OUTPUT_DIR}/chipqc" "$GENOME" "${THREADS_CHIPQC}" "broad" "$F2T_CONFIG"
-        fi
-    done
+    echo "=== [10] Post-alignment QC (deepTools) ==="
+    mkdir -p "${OUTPUT_DIR}/qc_post_alignment"
+    bash "${SCRIPT_DIR}/post_alignment_qc_batch.sh" \
+        "$SAMPLESHEET" \
+        "${OUTPUT_DIR}/filteredBams" \
+        "${OUTPUT_DIR}/peaks" \
+        "${OUTPUT_DIR}/bigwig" \
+        "${OUTPUT_DIR}/qc_post_alignment"
     mark_done 10
 fi
-
 # ── Step 11: DiffBind prep ────────────────────────────────────────────────────
 if is_done 11; then skip_msg 11; else
     echo "=== [11] DiffBind samplesheet preparation ==="
@@ -223,10 +219,16 @@ if is_done 13; then skip_msg 13; else
 fi
 
 # ── Cleanup ───────────────────────────────────────────────────────────────────
-[[ "${KEEP_INTERMEDIATE_BAMS}" == "false" ]] && \
+[[ "${KEEP_INTERMEDIATE_BAMS:-false}" == "false" ]] && \
     rm -f "${OUTPUT_DIR}/bams/"*.bam "${OUTPUT_DIR}/bams/"*.bai 2>/dev/null || true
-[[ "${KEEP_TRIMMED_FASTQ}" == "false" ]] && \
+[[ "${KEEP_TRIMMED_FASTQ:-false}" == "false" ]] && \
     rm -f "${OUTPUT_DIR}/trimmedFastq/"*.gz 2>/dev/null || true
+[[ "${KEEP_DEDUP_BAMS:-false}" == "false" ]] && \
+    rm -f "${OUTPUT_DIR}/dedupBams/"*.bam "${OUTPUT_DIR}/dedupBams/"*.bai 2>/dev/null || true
+[[ "${KEEP_FILTERED_BAMS:-false}" == "false" ]] && \
+    rm -f "${OUTPUT_DIR}/filteredBams/"*.bam "${OUTPUT_DIR}/filteredBams/"*.bai 2>/dev/null || true
+[[ "${KEEP_RAW_BEDGRAPH:-false}" == "false" ]] && \
+    rm -f "${OUTPUT_DIR}/bedGraph/"*.bedGraph.gz 2>/dev/null || true
 
 echo ""
 echo "=== fastq2tracks v3.0.4 complete ==="
@@ -235,6 +237,6 @@ echo "  BigWig        : ${OUTPUT_DIR}/bigwig/"
 echo "  BigWig merged : ${OUTPUT_DIR}/bigwig_merged/"
 echo "  Peaks narrow  : ${OUTPUT_DIR}/peaks/per_replicate/<sample>/narrow/"
 echo "  Peaks broad   : ${OUTPUT_DIR}/peaks/per_replicate/<sample>/broad/"
-echo "  ChIPQC        : ${OUTPUT_DIR}/chipqc/"
+echo "  QC deepTools  : ${OUTPUT_DIR}/qc_post_alignment/"
 echo "  DiffBind      : ${OUTPUT_DIR}/diffbind/"
 echo "  Report        : ${OUTPUT_DIR}/reports/"

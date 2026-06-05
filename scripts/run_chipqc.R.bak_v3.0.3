@@ -69,21 +69,32 @@ annotation <- readRDS(anno_rds); blacklist <- readRDS(blacklist_rds)
 ss <- read.csv(samplesheet_csv, stringsAsFactors = FALSE)
 ss <- ss[tolower(ss$genome) == genome_key, ]
 ss <- ss[tolower(ss$is_control) %in% c("false","0","no"), ]
+ss <- ss[!duplicated(ss$sample_id), ]   # collapse tech-rep rows
 if (nrow(ss) == 0) stop("No IP samples for genome: ", genome_key)
 
 chipqc_ss <- do.call(rbind, lapply(seq_len(nrow(ss)), function(i) {
     sid <- ss$sample_id[i]
     bam <- file.path(bam_dir, paste0(sid, "_bioR", ss$replicate[i], "_dedup_blFilt.bam"))
     if (!file.exists(bam)) bam <- file.path(bam_dir, paste0(sid, "_bioR", ss$replicate[i], "_dedup.bam"))
-    p_narrow <- file.path(peaks_dir, "per_replicate", sid, "narrow",
-                           paste0(sid, "_peaks.narrowPeak"))
-    p_broad  <- file.path(peaks_dir, "per_replicate", sid, "broad",
-                           paste0(sid, "_peaks.broadPeak"))
-    peak <- if (peak_type_pref == "narrow") {
+    p_narrow <- file.path(peaks_dir, "per_replicate", paste0(sid, "_bioR", ss$replicate[i]), "narrow",
+                           paste0(sid, "_bioR", ss$replicate[i], "_peaks.narrowPeak"))
+    p_broad  <- file.path(peaks_dir, "per_replicate", paste0(sid, "_bioR", ss$replicate[i]), "broad",
+                           paste0(sid, "_bioR", ss$replicate[i], "_peaks.broadPeak"))
+    raw_peak <- if (peak_type_pref == "narrow") {
         if (file.exists(p_narrow)) p_narrow else if (file.exists(p_broad)) p_broad else NA_character_
     } else {
         if (file.exists(p_broad)) p_broad else if (file.exists(p_narrow)) p_narrow else NA_character_
     }
+    # Strip contigs not in ChIPQC chromosome whitelist
+    peak <- if (!is.na(raw_peak) && file.exists(raw_peak)) {
+        allowed <- if (genome_key == "hg38") paste0("chr", c(1:22,"X","Y")) else paste0("chr", c(1:19,"X","Y"))
+        clean_peak <- sub("[.]narrowPeak$", "_clean.narrowPeak",
+                      sub("[.]broadPeak$",  "_clean.broadPeak", raw_peak))
+        peaks_df <- read.table(raw_peak, sep="\t", header=FALSE, stringsAsFactors=FALSE)
+        keep <- peaks_df[,1] %in% allowed
+        write.table(peaks_df[keep, ], clean_peak, sep="\t", quote=FALSE, row.names=FALSE, col.names=FALSE)
+        if (file.exists(clean_peak) && file.info(clean_peak)$size > 0) clean_peak else NA_character_
+    } else NA_character_
     data.frame(SampleID=sid, Tissue=ss$cell_type[i], Factor=ss$factor[i],
                Condition=ss$condition[i], Treatment=ss$treatment[i],
                Replicate=ss$replicate[i], bamReads=bam, Peaks=peak,
@@ -104,7 +115,28 @@ dir.create(out_subdir, showWarnings=FALSE, recursive=TRUE)
 write.csv(chipqc_ss, file.path(out_subdir, "chipqc_samplesheet.csv"), row.names=FALSE)
 cat("ChIPQC samples:", nrow(chipqc_ss), "\n")
 
-register(MulticoreParam(workers=n_workers, progressbar=TRUE))
+# -- Auto-scale workers to sample count ---------------------------------------
+n_samples <- nrow(chipqc_ss)
+
+safe_workers <- if (n_samples <= 10) {
+  n_workers
+} else if (n_samples <= 30) {
+  min(n_workers, 8L)
+} else if (n_samples <= 60) {
+  min(n_workers, 4L)
+} else {
+  min(n_workers, 2L)
+}
+
+if (safe_workers < n_workers) {
+  cat(sprintf(
+    "AUTO-SCALE: %d samples -> capping workers %d -> %d (memory guard)\n",
+    n_samples, n_workers, safe_workers
+  ))
+}
+n_workers <- safe_workers
+# -----------------------------------------------------------------------------
+register(SerialParam())
 cat("BiocParallel workers:", n_workers, "\n")
 cat("Running ChIPQC (", genome_key, peak_type_pref, ")...\n")
 

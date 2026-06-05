@@ -16,6 +16,7 @@ dir.create(out_dir, showWarnings=FALSE, recursive=TRUE)
 ss    <- read.csv(ss_file, stringsAsFactors=FALSE)
 ss    <- ss[tolower(ss$genome) == genome, ]
 ss_ip <- ss[tolower(ss$is_control) %in% c("false","0","no"), ]
+ss_ip <- ss_ip[!duplicated(ss_ip$sample_id), ]   # collapse tech-rep rows
 
 make_bam <- function(sid, rep, dir) {
     p <- file.path(dir, paste0(sid, "_bioR", rep, "_dedup_blFilt.bam"))

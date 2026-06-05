@@ -2,6 +2,7 @@
 # fastq2tracks v3.0.4 — Blacklist filtering batch (tech-replicate aware)
 # Usage: bash scripts/blacklist_filter_batch.sh
 set -euo pipefail
+
 _load_config() {
   if [[ -n "${F2T_CONFIG:-}" && -f "${F2T_CONFIG}" ]]; then
     source "${F2T_CONFIG}"
@@ -22,16 +23,19 @@ mkdir -p "$OUT_DIR"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S"); LOG_DIR="${OUT_DIR}/blacklist_logs_${TIMESTAMP}"
 mkdir -p "$LOG_DIR"
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_DIR/main.log"; }
+
 declare -a pids=()
 declare -A seen_keys=()
+
 wait_for_slot() {
   while [[ ${#pids[@]} -ge $MAX_JOBS ]]; do
     local new=(); for p in "${pids[@]}"; do kill -0 "$p" 2>/dev/null && new+=("$p"); done
     pids=("${new[@]+"${new[@]}"}"); sleep 2
   done
 }
+
 log "=== Blacklist filtering batch (tech-rep aware) ==="
-tail -n +2 "$SAMPLESHEET" | while IFS=',' read -r sample_id fastq_1 fastq_2 layout genome assay factor condition treatment cell_type replicate tech_rep is_control control_id macs2_mode blacklist rest; do
+while IFS=',' read -r sample_id fastq_1 fastq_2 layout genome assay factor condition treatment cell_type replicate tech_rep is_control control_id macs2_mode blacklist rest; do
   sample_id="${sample_id//\"/}"; blacklist="${blacklist//\"/}"
   replicate="${replicate//\"/}"
   KEY="${sample_id}_bioR${replicate}"
@@ -41,10 +45,23 @@ tail -n +2 "$SAMPLESHEET" | while IFS=',' read -r sample_id fastq_1 fastq_2 layo
   IN_BAM="${IN_DIR}/${KEY}_dedup.bam"
   [[ ! -f "$IN_BAM" ]] && { log "SKIP $KEY — dedup BAM not found"; continue; }
   OUT_BAM="${OUT_DIR}/${KEY}_dedup_blFilt.bam"
-  [[ -f "$OUT_BAM" ]] && { log "SKIP $KEY (filtered BAM exists)"; continue; }
+  if [[ -f "$OUT_BAM" ]]; then
+    if samtools quickcheck "$OUT_BAM" 2>/dev/null; then
+      log "SKIP $KEY (filtered BAM exists)"
+      continue
+    else
+      log "WARN $KEY: existing filtered BAM failed integrity check — re-filtering"
+      rm -f "$OUT_BAM" "${OUT_BAM}.bai"
+    fi
+  fi
   wait_for_slot
   (bash "$(dirname "$0")/blacklist_filter.sh" "$IN_BAM" "$blacklist" "$OUT_DIR" > "$LOG_DIR/${KEY}.log" 2>&1) &
   pids+=($!); log "STARTED: $KEY"
+done < <(tail -n +2 "$SAMPLESHEET")
+
+for p in "${pids[@]+"${pids[@]}"}"; do
+    wait "$p"
+    rc=$?
+    [[ $rc -ne 0 ]] && log "ERROR: a blacklist filter job exited with code $rc" && exit $rc
 done
-for p in "${pids[@]+"${pids[@]}"}"; do wait "$p" || true; done
 log "=== Blacklist filtering complete ==="
