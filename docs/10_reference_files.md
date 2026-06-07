@@ -4,7 +4,7 @@
 
 ---
 
-This page describes how to build the reference files required by fastq2tracks.
+This page describes how to build the reference files required by ATACseq2tracks.
 
 ---
 
@@ -29,7 +29,7 @@ bowtie2-build --threads 16 mm39.fa /path/to/indices/mm39/mm39
 ## Chromosome sizes
 
 ```bash
-conda activate fastq2tracks   # fetchChromSizes is included
+conda activate ATACseq2tracks   # fetchChromSizes is included
 
 fetchChromSizes hg38 > /path/to/ref/hs38n.chrom.sizes
 fetchChromSizes mm39 > /path/to/ref/mm39n.chrom.sizes
@@ -150,7 +150,7 @@ message("Done.")
 
 Run:
 ```bash
-conda activate fastq2tracks
+conda activate ATACseq2tracks
 Rscript build_chipqc_rds.R
 ```
 

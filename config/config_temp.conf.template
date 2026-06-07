@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
-# fastq2tracks v3.0.4 — Configuration template
-# https://github.com/MichalGd/fastq2tracks
+# ATACseq2tracks v3.0.4 — Configuration template
+# https://github.com/<username>/ATACseq2tracks
 #
 # INSTRUCTIONS:
 #   1. Copy this file to your project directory:
@@ -9,7 +9,7 @@
 #   2. Fill in all REQUIRED fields (marked with ### REQUIRED ###)
 #   3. Adjust thread counts to match your server
 #   4. Run:
-#        bash /path/to/fastq2tracks/fastq2tracks.sh --config /path/to/myproject/config.conf
+#        bash /path/to/ATACseq2tracks/atacseq2tracks.sh --config /path/to/myproject/config.conf
 #
 # This file should NOT contain real paths from your server.
 # Keep your personal config.conf in your project directory, NOT in the repo.
@@ -22,7 +22,7 @@
 SAMPLESHEET="/path/to/your/project/config/samplesheet.csv"
 
 # ### REQUIRED ### Absolute path to output directory (created automatically)
-OUTPUT_DIR="/path/to/your/project/fastq2tracks/"
+OUTPUT_DIR="/path/to/your/project/ATACseq2tracks/"
 
 # Max parallel samples per batch stage
 # Recommended: number of physical CPU cores / 4 (to leave room for multi-thread jobs)

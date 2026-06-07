@@ -1,5 +1,5 @@
 #!/bin/bash
-# fastq2tracks v3.0.4 — TrimGalore batch (SE + PE), trim_galore v2.2.0 Oxidized Edition
+# ATACseq2tracks v3.0.4 — TrimGalore batch (SE + PE), trim_galore v2.2.0 Oxidized Edition
 set -euo pipefail
 
 _load_config() {

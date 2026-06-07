@@ -1,6 +1,6 @@
 # Contributing
 
-Contributions to fastq2tracks are welcome. This project is primarily used for production
+Contributions to ATACseq2tracks are welcome. This project is primarily used for production
 ChIP-seq / ATAC-seq / CUT&RUN analysis in our laboratory, so stability and reproducibility
 are the top priorities.
 

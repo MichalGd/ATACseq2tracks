@@ -40,9 +40,9 @@ echo "THREADS_DEEPTOOLS=8" >> config.conf
 # 3. Install deepTools if not in conda environment
 mamba install -c bioconda deeptools>=3.5
 # 4. Copy new scripts
-cp scripts/post_alignment_qc_batch.sh  /path/to/fastq2tracks/scripts/
-cp scripts/plot_chrom_coverage.py       /path/to/fastq2tracks/scripts/
-chmod +x /path/to/fastq2tracks/scripts/post_alignment_qc_batch.sh
+cp scripts/post_alignment_qc_batch.sh  /path/to/ATACseq2tracks/scripts/
+cp scripts/plot_chrom_coverage.py       /path/to/ATACseq2tracks/scripts/
+chmod +x /path/to/ATACseq2tracks/scripts/post_alignment_qc_batch.sh
 # 5. Remove step10 checkpoint to rerun QC
 rm /path/to/analysis/.checkpoints/step10.done
 ```

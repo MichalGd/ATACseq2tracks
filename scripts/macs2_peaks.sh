@@ -1,5 +1,5 @@
 #!/bin/bash
-# fastq2tracks v3.0.4 — MACS2/MACS3 peak calling — always runs BOTH narrow AND broad
+# ATACseq2tracks v3.0.4 — MACS2/MACS3 peak calling — always runs BOTH narrow AND broad
 # Robust mode: retries with --nomodel on failure; creates empty peak file rather than aborting.
 # Usage: bash scripts/macs2_peaks.sh <ip.bam> <ctrl.bam|none> <outDir> <mode> <genome_key> [sample_name]
 set -uo pipefail   # NOTE: -e intentionally removed so we handle errors manually
@@ -11,7 +11,7 @@ _load_config() {
         local _d; _d="$(cd "$(dirname "${BASH_SOURCE[1]}")" && pwd)"
         local _c="${_d}/../config/config.conf"
         [[ -f "$_c" ]] && source "$_c" || {
-            echo "ERROR: config.conf not found. Export F2T_CONFIG or pass --config to fastq2tracks.sh." >&2
+            echo "ERROR: config.conf not found. Export F2T_CONFIG or pass --config to atacseq2tracks.sh." >&2
             exit 1
         }
     fi

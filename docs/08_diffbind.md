@@ -76,15 +76,12 @@ dba.plotMA(dba)
 dba.plotVolcano(dba)
 ```
 
----
+## Automated DiffBind analysis
 
-## Tips
+A new optional pipeline stage runs DiffBind directly on the prepared samplesheets.
 
-- **Narrow vs broad samplesheet:** Always use the narrow samplesheet for sharp marks even if you ran `macs2_mode=both`. Use the broad samplesheet for H3K27me3, H3K9me3, H3K36me3.
-- **Minimum replicates:** DiffBind requires at least 2 replicates per condition for statistical testing.
-- **Normalisation:** `dba.normalize()` defaults to library-size normalisation. For ChIP-seq with spike-in controls, use `method = DBA_NORM_SPIKEIN`.
-- **Missing peaks warning:** DiffBind will warn about samples with no peaks in a consensus set — check `chipqc_frip.csv` for those samples.
+```bash
+bash scripts/diffbind_analysis.sh diffbind diffbind_results
+```
 
----
-
-[← Outputs](07_outputs.md) | [Next: Troubleshooting →](09_troubleshooting.md)
+This writes results and diagnostic plots under `diffbind_results/`.

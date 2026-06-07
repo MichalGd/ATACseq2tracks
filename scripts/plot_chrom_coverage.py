@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-fastq2tracks v3.0.4 — Chromosome-wide coverage karyogram plot
+ATACseq2tracks v3.0.4 — Chromosome-wide coverage karyogram plot
 Replicates the ChIPQC "ChIP Peaks over Chromosomes" panel.
 
 Usage:

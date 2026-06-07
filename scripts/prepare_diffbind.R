@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # =============================================================================
-# fastq2tracks v3.0.4 — DiffBind sample sheet preparation (narrow + broad)
+# ATACseq2tracks v3.0.4 — DiffBind sample sheet preparation (narrow + broad)
 # Usage: Rscript scripts/prepare_diffbind.R <ss.csv> <bamDir> <peaksDir> <outDir> <genome>
 # Produces: diffbind_samplesheet_<genome>_narrow.csv
 #           diffbind_samplesheet_<genome>_broad.csv
@@ -56,6 +56,7 @@ build_ss <- function(ptype) {
             Factor     = ss_ip$factor[i],
             Condition  = ss_ip$condition[i],
             Treatment  = ss_ip$treatment[i],
+            Batch      = if ("batch" %in% names(ss_ip)) ss_ip$batch[i] else NA_character_,
             Replicate  = rep,
             bamReads   = make_bam(sid, rep, bam_dir),
             ControlID  = ifelse(is.na(ctrl_id) | nchar(ctrl_id) == 0, NA_character_, ctrl_id),

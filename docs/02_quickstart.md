@@ -12,11 +12,11 @@ For full details see [Installation](03_installation.md) and [Input files](04_inp
 ## Step 1 — Install
 
 ```bash
-git clone https://github.com/MichalGd/fastq2tracks.git
-cd fastq2tracks
+git clone https://github.com/<username>/ATACseq2tracks.git ATACseq2tracks
+cd ATACseq2tracks
 conda env create -f environment.yml
-conda activate fastq2tracks
-chmod +x fastq2tracks.sh scripts/*.sh scripts/*.py scripts/*.R
+conda activate ATACseq2tracks
+chmod +x atacseq2tracks.sh scripts/*.sh scripts/*.py scripts/*.R
 ```
 
 > **R packages** (DiffBind only) must be installed separately — see [Installation](03_installation.md#r-packages).
@@ -71,7 +71,7 @@ See [Input files](04_inputs.md) for the full column reference and example rows.
 Validate before running:
 
 ```bash
-python3 fastq2tracks/scripts/validate_samplesheet.py /path/to/my_project/config/samplesheet.csv
+python3 ATACseq2tracks/scripts/validate_samplesheet.py /path/to/my_project/config/samplesheet.csv
 ```
 
 ---
@@ -79,12 +79,12 @@ python3 fastq2tracks/scripts/validate_samplesheet.py /path/to/my_project/config/
 ## Step 5 — Run
 
 ```bash
-conda activate fastq2tracks
+conda activate ATACseq2tracks
 
-# Run from the PARENT folder of fastq2tracks/
+# Run from the PARENT folder of ATACseq2tracks/
 cd /path/to/parent_folder
 
-nohup bash fastq2tracks/fastq2tracks.sh \
+nohup bash ATACseq2tracks/atacseq2tracks.sh \
     --config /path/to/my_project/config/config.conf \
     > /path/to/my_project/run.log 2>&1 &
 
@@ -114,7 +114,7 @@ Check the log for the failed step, then:
 ```bash
 # Remove only the failed step's checkpoint and re-run
 rm /path/to/my_project/analysis/.checkpoints/step<N>.done
-nohup bash fastq2tracks/fastq2tracks.sh \
+nohup bash ATACseq2tracks/atacseq2tracks.sh \
     --config /path/to/my_project/config/config.conf \
     >> /path/to/my_project/run_resume.log 2>&1 &
 ```

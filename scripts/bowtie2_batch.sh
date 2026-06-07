@@ -1,5 +1,5 @@
 #!/bin/bash
-# fastq2tracks v3.0.4 — Bowtie2 alignment batch (SE + PE, samplesheet-driven)
+# ATACseq2tracks v3.0.4 — Bowtie2 alignment batch (SE + PE, samplesheet-driven)
 # PATCHED: added seen_keys guard to prevent duplicate alignment of tech-rep rows
 set -euo pipefail
 

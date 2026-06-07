@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # =============================================================================
-# fastq2tracks v3.0.4 — ChIPQC module
+# ATACseq2tracks v3.0.4 — ChIPQC module
 # =============================================================================
 suppressPackageStartupMessages({
     library(ChIPQC); library(BiocParallel)

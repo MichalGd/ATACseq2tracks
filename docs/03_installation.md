@@ -10,7 +10,7 @@ The conda environment file `environment.yml` installs all command-line dependenc
 
 ```bash
 conda env create -f environment.yml
-conda activate fastq2tracks
+conda activate ATACseq2tracks
 ```
 
 | Tool | Minimum version | Role |
@@ -122,11 +122,23 @@ See [Reference file preparation](10_reference_files.md) for the full download co
 
 ---
 
+## Shared Linux server installation
+
+On a multi-user Linux server, install the repository into a shared path such as `/opt/ATACseq2tracks` or `/usr/local/ATACseq2tracks`. Make the code tree readable and executable by all users, while keeping each user’s project config and output directories separate from the shared code installation.
+
+```bash
+sudo mkdir -p /opt/ATACseq2tracks
+sudo chown -R root:your_group /opt/ATACseq2tracks
+sudo chmod -R a+rX /opt/ATACseq2tracks
+```
+
+Each user should create their own project directory elsewhere, copy `config/config.conf` and `config/samplesheet_template.csv` into it, and run the pipeline from the shared installation.
+
 ## Make scripts executable
 
 ```bash
-cd /path/to/fastq2tracks
-chmod +x fastq2tracks.sh scripts/*.sh scripts/*.py scripts/*.R
+cd /path/to/ATACseq2tracks
+chmod +x atacseq2tracks.sh scripts/*.sh scripts/*.py scripts/*.R
 ```
 
 ---
@@ -134,8 +146,8 @@ chmod +x fastq2tracks.sh scripts/*.sh scripts/*.py scripts/*.R
 ## Verify installation
 
 ```bash
-conda activate fastq2tracks
-bash fastq2tracks/scripts/smoke_test.sh \
+conda activate ATACseq2tracks
+bash ATACseq2tracks/scripts/smoke_test.sh \
     /path/to/my_project/config/samplesheet.csv \
     /path/to/my_project/config/config.conf
 ```

@@ -126,7 +126,7 @@ bamCoverage: error: the following arguments are required: --bam/-b
 **Cause:** deepTools version < 3.5 uses a different argument syntax for `bamCoverage`.
 **Fix:** Update deepTools to >= 3.5:
 ```bash
-conda activate fastq2tracks
+conda activate ATACseq2tracks
 mamba install deeptools>=3.5
 ```
 
@@ -141,7 +141,7 @@ ModuleNotFoundError: No module named 'matplotlib'
 **Cause:** `matplotlib`, `numpy`, or `pandas` are not installed in the active conda environment.
 **Fix:**
 ```bash
-conda activate fastq2tracks
+conda activate ATACseq2tracks
 mamba install matplotlib numpy pandas
 ```
 
@@ -205,7 +205,7 @@ Pre-flight check (step 0) requires 50 GB free. For 30+ samples with PE reads, bu
 
 ## General checklist
 
-- [ ] Running from the **parent** of `fastq2tracks/`, not from inside it
+- [ ] Running from the **parent** of `ATACseq2tracks/`, not from inside it
 - [ ] `F2T_CONFIG` is exported OR `--config` is passed to the master script
 - [ ] All FASTQ paths in the samplesheet are **absolute**, not relative
 - [ ] `control_id` values match `sample_id` values **exactly** (case-sensitive)

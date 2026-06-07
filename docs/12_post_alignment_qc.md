@@ -6,7 +6,7 @@
 
 ## Overview
 
-Step 10 of the fastq2tracks pipeline runs a post-alignment QC module based on
+Step 10 of the ATACseq2tracks pipeline runs a post-alignment QC module based on
 [deepTools](https://deeptools.readthedocs.io/) and standard command-line tools.
 It replaces the legacy ChIPQC (Bioconductor) module and produces robust,
 publication-ready QC outputs that work across all supported assay types, including
@@ -155,25 +155,38 @@ Data: `qc_post_alignment/matrices/pca_bins.tsv`
 
 ### Phase 4 — Consensus peaks + peak-centric QC
 
-Builds a merged consensus peak set from all samples and performs peak-centric
+Builds a reproducible consensus peak set from narrow peaks and performs peak-centric
 multi-sample comparisons.
 
 #### Consensus peak set construction
 
-All narrow and broad per-replicate peak files are merged into a single
-non-redundant BED file:
+When replicate narrow peak calls are available, the pipeline builds a reproducible
+consensus peak set from regions observed in at least two per-replicate narrow peaks.
+If no reproducible narrow consensus can be computed, it falls back to the merged
+union of narrow and broad peaks.
 
 ```bash
 cat peaks/per_replicate/*/narrow/*.narrowPeak | sort -k1,1 -k2,2n | bedtools merge > merged_narrow.bed
 cat peaks/per_replicate/*/broad/*.broadPeak  | sort -k1,1 -k2,2n | bedtools merge > merged_broad.bed
-# Consensus = union of narrow + broad
-cat merged_narrow.bed merged_broad.bed | sort -k1,1 -k2,2n | bedtools merge > consensus_peaks.bed
+bedtools multiinter -i peaks/per_replicate/*/narrow/*.narrowPeak \
+    | awk '$4 >= 2 {print $1"\t"$2"\t"$3}' \
+    | bedtools merge -i stdin > consensus_peaks_supported.bed
+# Consensus = reproducible narrow peaks when replicates exist
+cp consensus_peaks_supported.bed consensus_peaks.bed || true
+if [[ ! -s consensus_peaks.bed ]]; then
+  cat merged_narrow.bed merged_broad.bed | sort -k1,1 -k2,2n | bedtools merge > consensus_peaks.bed
+fi
 ```
 
 Samples with zero peaks still contribute signal via their BAM — they simply
 do not add regions to the consensus set.
 
 Output: `qc_post_alignment/peak_sets/consensus_peaks.bed`
+
+Additional consensus outputs:
+- `qc_post_alignment/matrices/consensus_peak_counts.tsv` — raw consensus peak count matrix
+- `qc_post_alignment/matrices/consensus_peak_normCounts.tsv` — DESeq2 normalized consensus peak counts
+- `qc_post_alignment/tables/consensus_sizeFactors.tsv` — DESeq2 size factors from consensus peak counts
 
 #### Signal correlation and PCA over consensus peaks
 
@@ -235,6 +248,7 @@ qc_post_alignment/
 |   +-- qc_summary.tsv               # Per-sample: reads, dup%, mito%, peaks, FRiP
 |   +-- qc_warnings.tsv              # Flagged samples with warning codes
 |   +-- frip_consensus.tsv           # FRiP over merged consensus peak set
+|   +-- consensus_sizeFactors.tsv    # DESeq2 consensus peak size factors
 |   +-- per_chromosome_reads.tsv     # Read counts per chromosome per sample
 |   +-- fingerprint_metrics.tsv      # deepTools fingerprint raw values
 |
@@ -255,6 +269,8 @@ qc_post_alignment/
 +-- matrices/
 |   +-- bins_summary.npz                 # multiBamSummary bins matrix
 |   +-- peaks_summary.npz                # multiBamSummary peaks matrix
+|   +-- consensus_peak_counts.tsv        # Raw counts over consensus peak regions
+|   +-- consensus_peak_normCounts.tsv    # DESeq2 normalized consensus counts
 |   +-- signal_matrix.gz                 # computeMatrix output
 |   +-- pca_bins.tsv                     # PCA coordinates (text)
 |
@@ -326,7 +342,7 @@ THREADS_DEEPTOOLS=16   # threads for deepTools steps; set to available CPUs / 2
 ```bash
 rm /path/to/project/.checkpoints/step10.done
 
-nohup bash /path/to/fastq2tracks/fastq2tracks.sh \
+nohup bash /path/to/ATACseq2tracks/atacseq2tracks.sh \
     --config /path/to/project/config/config.conf \
     >> /path/to/project/rerun_step10.log 2>&1 &
 ```

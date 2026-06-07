@@ -53,6 +53,11 @@ which genome to use, how to pair IPs with controls, and what type of peaks to ca
   `tech_replicate` (1, 2, …).
 - The pipeline merges their FASTQs before trimming.
 
+**Batch metadata (optional)**
+- You may add an optional `batch` column to the samplesheet.
+- The pipeline preserves this field in DiffBind sample sheets if present.
+- Use `batch` when you have known technical batches, library prep blocks, or sequencing lanes.
+
 **Mixed genomes**
 - hg38 and mm39 rows can coexist in the same samplesheet.
 - Steps 8–11 iterate over each genome separately.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-fastq2tracks v3.1.0 — Sample sheet validator
+ATACseq2tracks v3.1.0 — Sample sheet validator
 Usage: python3 scripts/validate_samplesheet.py [--check-files] samplesheet.csv
 
 Schema changes:

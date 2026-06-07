@@ -19,7 +19,7 @@ Blacklist filtering is therefore considered an **essential quality step** for Ch
 
 ---
 
-## How blacklist filtering is implemented in fastq2tracks
+## How blacklist filtering is implemented in ATACseq2tracks
 
 Blacklist filtering is **Step 6** of the pipeline, applied immediately after Picard deduplication (Step 5) and before all downstream analyses (tracks, peak calling, QC, DiffBind).
 
@@ -105,7 +105,7 @@ In practical terms, for a typical ChIP-seq library aligned to hg38, blacklist re
 
 ## Blacklist sources and references
 
-### hg38 — ENCODE unified exclusion list (ENCFF356LFX) ✓ **Used in fastq2tracks**
+### hg38 — ENCODE unified exclusion list (ENCFF356LFX) ✓ **Used in ATACseq2tracks**
 
 | Attribute | Detail |
 |---|---|
@@ -123,7 +123,7 @@ This is the **current recommended blacklist for hg38** and is referred to as the
 
 ---
 
-### mm39 / GRCm39 — excluderanges (Dozmorov lab) ✓ **Used in fastq2tracks**
+### mm39 / GRCm39 — excluderanges (Dozmorov lab) ✓ **Used in ATACseq2tracks**
 
 | Attribute | Detail |
 |---|---|

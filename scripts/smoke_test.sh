@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# fastq2tracks v3.0.3 — Pre-flight smoke test
+# ATACseq2tracks v3.0.3 — Pre-flight smoke test
 # Usage: bash scripts/smoke_test.sh <samplesheet.csv> <config.conf>
 # =============================================================================
 set -euo pipefail
@@ -15,7 +15,7 @@ fail() { echo "[FAIL] $1" >&2; ((FAIL++)) || true; }
 warn() { echo "[WARN] $1"; ((WARN++)) || true; }
 
 echo "============================================================"
-echo " fastq2tracks v3.0.3 -- Pre-flight check"
+echo " ATACseq2tracks v3.0.3 -- Pre-flight check"
 echo " $(date)"
 echo "============================================================"
 

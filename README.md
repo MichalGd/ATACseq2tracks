@@ -1,4 +1,4 @@
-# fastq2tracks
+# ATACseq2tracks
 
 > **ChIP-seq · ATAC-seq · CUT&RUN · CUT&TAG · ChIPmentation**
 > A modular, checkpoint-based workflow from raw FASTQ to bigwig tracks, MACS3 peaks,
@@ -14,7 +14,7 @@
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [How fastq2tracks relates to rnaseq2tracksP](#how-fastq2tracks-relates-to-rnaseq2tracksp)
+2. [How ATACseq2tracks relates to rnaseq2tracksP](#how-atacseq2tracks-relates-to-rnaseq2tracksp)
 3. [Workflow diagram](#workflow-diagram)
 4. [Repository layout](#repository-layout)
 5. [Requirements](#requirements)
@@ -36,7 +36,7 @@
 
 ## Overview
 
-**fastq2tracks** processes raw FASTQ files from ChIP-seq and related chromatin-profiling assays through a complete, production-ready analysis pipeline:
+**ATACseq2tracks** processes raw FASTQ files from ChIP-seq and related chromatin-profiling assays through a complete, production-ready analysis pipeline:
 
 | What it does | Tools used |
 |---|---|
@@ -50,6 +50,7 @@
 | Narrow and broad peak calling | [MACS3](https://macs3-project.github.io/MACS/) |
 | Post-alignment QC (FRiP, PCA, correlation, karyogram) | [deepTools](https://deeptools.readthedocs.io/) + [samtools](http://www.htslib.org/) + [bedtools](https://bedtools.readthedocs.io/) |
 | DiffBind samplesheet preparation | [R](https://www.r-project.org/) / [dplyr](https://dplyr.tidyverse.org/) |
+| DiffBind differential accessibility analysis | [R](https://www.r-project.org/) / [DiffBind](https://bioconductor.org/packages/release/bioc/html/DiffBind.html) |
 | UCSC track hub generation | [UCSC Genome Browser](https://genome.ucsc.edu/) trackDb |
 | HTML pipeline report | bash |
 
@@ -57,11 +58,11 @@ A single CSV **samplesheet** drives the entire run. All parameters (paths, threa
 
 ---
 
-## How fastq2tracks relates to rnaseq2tracksP
+## How ATACseq2tracks relates to rnaseq2tracksP
 
 Both pipelines share the same design philosophy — samplesheet-driven, config-file-parameterised, checkpoint-resumable — but target different assay types:
 
-| | **fastq2tracks** | **rnaseq2tracksP** |
+| | **ATACseq2tracks** | **rnaseq2tracksP** |
 |---|---|---|
 | Assay | ChIP-seq, ATAC-seq, CUT&RUN, CUT&TAG, ChIPmentation | RNA-seq |
 | Alignment | Bowtie2 (gapped-free, short reads) | STAR or HISAT2 (splice-aware) |
@@ -97,14 +98,24 @@ flowchart TD
     H --> O[Step 10\nPost-alignment QC\npost_alignment_qc_batch.sh]
     N --> O
     L --> O
-    H --> P[Step 11\nDiffBind prep\nprepare_diffbind.R]
+    H --> P[Step 11
+DiffBind prep
+prepare_diffbind.R]
     N --> P
-    L --> Q[Step 12\nUCSC track hub\ncreate_ucsc_tracks.sh]
-    M --> Q
-    O --> R[Step 13\nPipeline report\ngenerate_pipeline_report.sh]
-    P --> R
-    Q --> R
-    R --> S([HTML report\nDiffBind CSVs\nUCSC trackdb.txt])
+    P --> Q[Step 12
+DiffBind DA
+scripts/diffbind_analysis.sh]
+    L --> R[Step 13
+UCSC track hub
+create_ucsc_tracks.sh]
+    M --> R
+    Q --> S[Step 14
+Pipeline report
+generate_pipeline_report.sh]
+    P --> Q
+    R --> S
+    Q --> S
+R --> S([HTML report\nDiffBind CSVs\nUCSC trackdb.txt])
 
     style A fill:#d4edda,stroke:#28a745
     style S fill:#cce5ff,stroke:#004085
@@ -117,8 +128,8 @@ flowchart TD
 ## Repository layout
 
 ```
-fastq2tracks/
-├── fastq2tracks.sh              ← Master script — this is what you run
+ATACseq2tracks/
+├── atacseq2tracks.sh            ← Master script — this is what you run
 ├── environment.yml              ← Conda environment
 ├── CHANGELOG.md
 ├── CONTRIBUTING.md
@@ -168,7 +179,7 @@ fastq2tracks/
     └── generate_pipeline_report.sh
 ```
 
-> **Run from the parent directory** containing `fastq2tracks/` — not from inside the folder itself.
+> **Run from the parent directory** containing `ATACseq2tracks/` — not from inside the folder itself.
 
 ---
 
@@ -232,12 +243,12 @@ See [Reference file preparation](docs/10_reference_files.md) for download comman
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/MichalGd/fastq2tracks.git
-cd fastq2tracks
+git clone https://github.com/<username>/ATACseq2tracks.git ATACseq2tracks
+cd ATACseq2tracks
 
 # 2. Create and activate the conda environment
 conda env create -f environment.yml
-conda activate fastq2tracks
+conda activate ATACseq2tracks
 
 # 3. Install MACS3 (Python 3.11 compatible peak caller)
 pip install macs3
@@ -246,7 +257,12 @@ pip install macs3
 mamba install -c bioconda deeptools>=3.5
 
 # 5. Make scripts executable
-chmod +x fastq2tracks.sh scripts/*.sh scripts/*.py scripts/*.R
+chmod +x atacseq2tracks.sh scripts/*.sh scripts/*.py scripts/*.R
+
+# Optional: install for all users on a shared Linux server
+sudo mkdir -p /opt/ATACseq2tracks
+sudo chown -R root:your_group /opt/ATACseq2tracks
+sudo chmod -R a+rX /opt/ATACseq2tracks
 
 # 6. Create a project directory and copy templates
 mkdir -p /path/to/my_project/config
@@ -331,15 +347,15 @@ See [docs/04_inputs.md](docs/04_inputs.md#configuration-file) for the complete p
 ## Running the pipeline
 
 ```bash
-conda activate fastq2tracks
+conda activate ATACseq2tracks
 
 # Validate the samplesheet first
-python3 fastq2tracks/scripts/validate_samplesheet.py /path/to/config/samplesheet.csv
+python3 ATACseq2tracks/scripts/validate_samplesheet.py /path/to/config/samplesheet.csv
 
-# Run from the PARENT folder of fastq2tracks/
+# Run from the PARENT folder of ATACseq2tracks/
 cd /path/to/parent_folder
 
-nohup bash fastq2tracks/fastq2tracks.sh \
+nohup bash ATACseq2tracks/atacseq2tracks.sh \
     --config /path/to/my_project/config/config.conf \
     > /path/to/my_project/run.log 2>&1 &
 
@@ -389,6 +405,7 @@ See [Pipeline steps](docs/06_pipeline_steps.md) for detailed documentation of ea
 ├── bedGraph/                        # Raw coverage bedGraphs
 ├── NormBedGraph/                    # Library-size normalised bedGraphs
 ├── bigwig/                          # Per-replicate RPKM bigwig tracks
+├── bigwig_peaknorm/                 # Peak-normalised bigwig tracks (DESeq2 consensus peak size factors)
 ├── bigwig_merged/                   # Condition-group merged bigwig tracks
 │
 ├── peaks/
@@ -416,6 +433,20 @@ See [Pipeline steps](docs/06_pipeline_steps.md) for detailed documentation of ea
 │
 ├── diffbind/                        # DiffBind samplesheets (narrow + broad)
 ├── logs/                            # Per-step log files
+
+### Example: peak-normalised bigwig output
+
+- `bigwig/` contains standard per-sample bigwig tracks normalized by library size (RPKM-style).
+- `bigwig_peaknorm/` contains peak-normalised bigwig tracks scaled by DESeq2 size factors derived from counts over the shared consensus peak set.
+- Use `bigwig_peaknorm/` when comparing signal across samples in the same experiment, because the scaling is anchored to consensus accessible regions rather than genome-wide coverage.
+
+Example UCSC track line:
+
+```text
+track type=bigWig name="sample_peaknorm" description="Peak-normalised signal" bigDataUrl=https://your.server/path/to/bigwig_peaknorm/sample_bioR1_dedup_blFilt_peaknorm.bw
+```
+
+See [Pipeline steps](docs/06_pipeline_steps.md) for detailed documentation of each step.
 │
 └── reports/
     ├── ucsc_trackdb.txt
@@ -433,7 +464,7 @@ Each step writes a checkpoint file `<OUTPUT_DIR>/.checkpoints/stepN.done` when i
 ```bash
 # Rerun step 10 (deepTools QC) only
 rm /path/to/analysis/.checkpoints/step10.done
-nohup bash fastq2tracks/fastq2tracks.sh \
+nohup bash ATACseq2tracks/atacseq2tracks.sh \
     --config /path/to/config/config.conf \
     >> run_rerun.log 2>&1 &
 
@@ -554,7 +585,7 @@ Original version supporting PE reads and two separate genome-specific batch scri
 
 ## Citation
 
-If you use fastq2tracks in your work, please cite the tools it depends on:
+> If you use ATACseq2tracks in your work, please cite the tools it depends on:
 
 - **Bowtie2:** Langmead & Salzberg, *Nature Methods* 9:357–359 (2012). DOI: [10.1038/nmeth.1923](https://doi.org/10.1038/nmeth.1923)
 - **Picard:** Broad Institute. https://broadinstitute.github.io/picard/

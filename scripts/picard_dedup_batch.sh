@@ -1,5 +1,5 @@
 #!/bin/bash
-# fastq2tracks v3.0.4 — Picard deduplication batch
+# ATACseq2tracks v3.0.4 — Picard deduplication batch
 # PATCHED: samtools quickcheck guard before addreplacerg;
 #          tolerant wait loop so one failed RG job doesn't kill the whole batch
 # Usage: bash scripts/picard_dedup_batch.sh [max_jobs]

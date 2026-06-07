@@ -1,5 +1,5 @@
 #!/bin/bash
-# fastq2tracks v3.0.2 — Genome coverage: bedGraph + RPM bigWig
+# ATACseq2tracks v3.0.2 — Genome coverage: bedGraph + RPM bigWig
 # Usage: bash scripts/genomecoverage_single.sh <bam> <hg38|mm39> <outDir>
 set -euo pipefail
 _load_config() {
@@ -9,7 +9,7 @@ _load_config() {
         local _d; _d="$(cd "$(dirname "${BASH_SOURCE[1]}")" && pwd)"
         local _c="${_d}/../config/config.conf"
         [[ -f "$_c" ]] && source "$_c" || {
-            echo "ERROR: config.sh not found. Export F2T_CONFIG or pass --config to fastq2tracks.sh." >&2
+            echo "ERROR: config.sh not found. Export F2T_CONFIG or pass --config to atacseq2tracks.sh." >&2
             exit 1
         }
     fi

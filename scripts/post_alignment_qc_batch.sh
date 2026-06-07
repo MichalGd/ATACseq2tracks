@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# fastq2tracks v3.0.4 — Post-alignment QC module (deepTools-based)
+# ATACseq2tracks v3.0.4 — Post-alignment QC module (deepTools-based)
 # Replaces ChIPQC with a robust, crash-proof deepTools + samtools/bedtools QC.
 #
 # Compatible assays: ChIP-seq, CUT&RUN, CUT&Tag, ChIPmentation, ATAC-seq
@@ -14,7 +14,7 @@
 #   - deepTools: computeMatrix, plotHeatmap, plotProfile over consensus peaks
 #   - Robust: zero-peak samples stay in all BAM-level analyses; never dropped
 #
-# Usage (called by fastq2tracks.sh as Step 10):
+# Usage (called by atacseq2tracks.sh as Step 10):
 #   bash scripts/post_alignment_qc_batch.sh \
 #       <SAMPLESHEET> <BAM_DIR> <PEAKS_DIR> <BIGWIG_DIR> <OUT_QC_DIR>
 # =============================================================================
@@ -54,8 +54,9 @@ QC_MATRICES="${OUT_DIR}/matrices"
 QC_LOGS="${OUT_DIR}/logs"
 QC_PEAKS="${OUT_DIR}/peak_sets"
 QC_DT="${OUT_DIR}/deeptools"
+BIGWIG_PEAKNORM_DIR="$(dirname "$BIGWIG_DIR")/bigwig_peaknorm"
 mkdir -p "$QC_TABLES" "$QC_PLOTS" "$QC_CHRPLOTS" "$QC_MATRICES" \
-         "$QC_LOGS" "$QC_PEAKS" "$QC_DT"
+         "$QC_LOGS" "$QC_PEAKS" "$QC_DT" "$BIGWIG_PEAKNORM_DIR"
 
 MAIN_LOG="${QC_LOGS}/post_qc_${TIMESTAMP}.log"
 SUMMARY_TSV="${QC_TABLES}/qc_summary.tsv"
@@ -106,6 +107,63 @@ add_warning() {
     local sid="$1" wtype="$2" val="$3" thr="$4" msg="$5"
     echo -e "${sid}\t${wtype}\t${val}\t${thr}\t${msg}" >> "$WARNINGS_TSV"
     warn "$sid — $wtype: $msg"
+}
+
+generate_peaknorm_bigwig() {
+    local bam="$1" key="$2" size_factor="$3"
+    local genome="${SAMPLE_GENOME[$key]:-hg38}"
+    local outdir="$BIGWIG_PEAKNORM_DIR"
+    local sample=$(basename "$bam" .bam)
+    local std_bam="${outdir}/${sample}_stChr.bam"
+    local raw_bg="${outdir}/${sample}_peaknorm.bedGraph"
+    local sorted_bg="${outdir}/${sample}_peaknorm_Snorm.bedGraph"
+    local bw="${outdir}/${sample}_peaknorm.bw"
+    local chrom_sizes=""
+    local std_chr=""
+
+    if [[ "${genome,,}" == "hg38" ]]; then
+        chrom_sizes="$CHROM_SIZES_HUMAN"
+        std_chr="chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 chr11 chr12 chr13 chr14 chr15 chr16 chr17 chr18 chr19 chr20 chr21 chr22 chrX chrY"
+    elif [[ "${genome,,}" == "mm39" ]]; then
+        chrom_sizes="$CHROM_SIZES_MOUSE"
+        std_chr="chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 chr11 chr12 chr13 chr14 chr15 chr16 chr17 chr18 chr19 chrX chrY"
+    else
+        warn "Unknown genome for $key: $genome — skipping peak-normalised bigwig"
+        return 1
+    fi
+    if [[ -z "$chrom_sizes" || ! -f "$chrom_sizes" ]]; then
+        warn "Chromosome sizes file unavailable for $genome — cannot create peak-normalised bigwig for $key"
+        return 1
+    fi
+    if [[ -z "$size_factor" || "$size_factor" == "NA" || $(awk 'BEGIN{print ('$size_factor'<=0)}') -eq 1 ]]; then
+        warn "Invalid size factor for $key: $size_factor — skipping peak-normalised bigwig"
+        return 1
+    fi
+    if [[ ! -f "$bam" ]]; then
+        warn "BAM not found for peak-normalised bigwig: $bam"
+        return 1
+    fi
+
+    samtools index -@ "${THREADS_BIGWIG}" "$bam" 2>/dev/null || true
+    samtools view -@ "${THREADS_BIGWIG}" -b "$bam" $std_chr -o "$std_bam"
+    samtools index -@ "${THREADS_BIGWIG}" "$std_bam"
+
+    local reads
+    reads=$(samtools view -@ "${THREADS_BIGWIG}" -c -F 4 "$std_bam" 2>/dev/null || echo 0)
+    if [[ "$reads" -le 0 ]]; then
+        warn "Zero reads in filtered BAM for $key — cannot create peak-normalised bigwig"
+        rm -f "$std_bam" "${std_bam}.bai"
+        return 1
+    fi
+
+    local scale
+    scale=$(awk "BEGIN {printf \"%.10f\", 1000000/($reads * $size_factor)}")
+    bedtools genomecov -ibam "$std_bam" -bga -scale "$scale" > "$raw_bg"
+    awk '$1~/^chr/' "$raw_bg" | LC_COLLATE=C sort -k1,1 -k2,2n > "$sorted_bg"
+    "$BEDGRAPH_TO_BIGWIG" "$sorted_bg" "$chrom_sizes" "$bw"
+    gzip -f "$sorted_bg"
+    rm -f "$raw_bg" "$std_bam" "${std_bam}.bai"
+    log "  Peak-normalised bigwig generated: $bw"
 }
 
 compute_frip() {
@@ -448,6 +506,7 @@ for pk in "${SAMPLE_BROAD[@]}";  do [[ -f "$pk" && -s "$pk" ]] && BROAD_WITH_PEA
 MERGED_NARROW="${QC_PEAKS}/merged_narrow.bed"
 MERGED_BROAD="${QC_PEAKS}/merged_broad.bed"
 CONSENSUS_PEAK="${QC_PEAKS}/consensus_peaks.bed"
+CONSENSUS_SUPPORTED="${QC_PEAKS}/consensus_peaks_supported.bed"
 
 [[ ${#NARROW_WITH_PEAKS[@]} -gt 0 ]] && \
     cat "${NARROW_WITH_PEAKS[@]}" | cut -f1-3 | sort -k1,1 -k2,2n \
@@ -459,11 +518,23 @@ CONSENSUS_PEAK="${QC_PEAKS}/consensus_peaks.bed"
     | bedtools merge -i stdin > "$MERGED_BROAD" 2>>"$MAIN_LOG" \
     && log "Merged broad: $(wc -l < "$MERGED_BROAD") regions"
 
+if [[ ${#NARROW_WITH_PEAKS[@]} -gt 1 ]]; then
+    log "Building reproducible narrow consensus peaks from ${#NARROW_WITH_PEAKS[@]} peak files"
+    bedtools multiinter -i "${NARROW_WITH_PEAKS[@]}" \
+        | awk '$4 >= 2 {print $1"\t"$2"\t"$3}' \
+        | bedtools merge -i stdin > "$CONSENSUS_SUPPORTED" 2>>"$MAIN_LOG" \
+        && log "Supported consensus peaks: $(wc -l < "$CONSENSUS_SUPPORTED") regions"
+fi
+
 PEAK_FILES_FOR_CONSENSUS=()
 [[ -f "$MERGED_NARROW" && -s "$MERGED_NARROW" ]] && PEAK_FILES_FOR_CONSENSUS+=("$MERGED_NARROW")
 [[ -f "$MERGED_BROAD"  && -s "$MERGED_BROAD"  ]] && PEAK_FILES_FOR_CONSENSUS+=("$MERGED_BROAD")
 
-if [[ ${#PEAK_FILES_FOR_CONSENSUS[@]} -gt 0 ]]; then
+if [[ -f "$CONSENSUS_SUPPORTED" && -s "$CONSENSUS_SUPPORTED" ]]; then
+    cp "$CONSENSUS_SUPPORTED" "$CONSENSUS_PEAK"
+    log "Consensus peaks: $(wc -l < "$CONSENSUS_PEAK") regions"
+elif [[ ${#PEAK_FILES_FOR_CONSENSUS[@]} -gt 0 ]]; then
+    log "Falling back to merged union consensus peak set"
     cat "${PEAK_FILES_FOR_CONSENSUS[@]}" | sort -k1,1 -k2,2n \
         | bedtools merge -i stdin > "$CONSENSUS_PEAK" 2>>"$MAIN_LOG" \
         && log "Consensus peaks: $(wc -l < "$CONSENSUS_PEAK") regions"
@@ -555,6 +626,35 @@ if [[ -f "$CONSENSUS_PEAK" && -s "$CONSENSUS_PEAK" ]]; then
         echo -e "${KEY}\t${TOTAL}\t${RIP}\t${FRIP_C}" >> "$FRIP_CONSENSUS_TSV"
     done
     log "FRiP consensus: $FRIP_CONSENSUS_TSV"
+
+    CONSENSUS_SIZEFACTORS_TSV="${QC_TABLES}/consensus_sizeFactors.tsv"
+    CONSENSUS_COUNTS_TSV="${QC_MATRICES}/consensus_peak_counts.tsv"
+    CONSENSUS_NORM_COUNTS_TSV="${QC_MATRICES}/consensus_peak_normCounts.tsv"
+
+    R_SCRIPT="${R_BIN:-Rscript}"
+    if command -v "$R_SCRIPT" >/dev/null 2>&1 && [[ -f "${QC_MATRICES}/multiBamSummary_peaks.tab" ]]; then
+        "$R_SCRIPT" "${SCRIPT_DIR}/consensus_peak_size_factors.R" \
+            "$SAMPLESHEET" "${QC_MATRICES}/multiBamSummary_peaks.tab" "${QC_TABLES}" \
+            "$CONSENSUS_COUNTS_TSV" "$CONSENSUS_NORM_COUNTS_TSV" \
+            > "$MAIN_LOG" 2>&1 \
+        && log "Consensus peak count matrix + DESeq2 size factors written" \
+        || warn "Consensus peak size factor estimation failed"
+    else
+        warn "Skipping consensus size factor estimation: Rscript or multiBamSummary_peaks.tab not available"
+    fi
+
+    if [[ -f "$CONSENSUS_SIZEFACTORS_TSV" && -s "$CONSENSUS_SIZEFACTORS_TSV" && -n "$BEDGRAPH_TO_BIGWIG" && -f "$BEDGRAPH_TO_BIGWIG" ]]; then
+        log "=== Phase 5: Peak-normalized bigWig generation ==="
+        for i in "${!SAMPLE_KEYS[@]}"; do
+            KEY="${SAMPLE_KEYS[$i]}"; BAM="${SAMPLE_BAMS[$i]}"
+            SIZE_FACTOR=$(awk -F'\t' -v key="$KEY" '$2==key {print $3}' "$CONSENSUS_SIZEFACTORS_TSV" | head -1)
+            [[ -z "$SIZE_FACTOR" ]] && continue
+            generate_peaknorm_bigwig "$BAM" "$KEY" "$SIZE_FACTOR" || warn "Peak-normalised bigwig failed for $KEY"
+        done
+        log "Peak-normalised bigwig directory: $BIGWIG_PEAKNORM_DIR"
+    else
+        warn "Skipping peak-normalised bigWig generation: missing size factors or BEDGRAPH_TO_BIGWIG"
+    fi
 fi
 
 # =============================================================================

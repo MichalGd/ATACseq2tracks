@@ -1,8 +1,8 @@
-# fastq2tracks — Documentation Index
+# ATACseq2tracks — Documentation Index
 
-Welcome to the **fastq2tracks** documentation.
+Welcome to the **ATACseq2tracks** documentation.
 
-fastq2tracks is a checkpoint-based, samplesheet-driven pipeline that processes raw FASTQ files
+ATACseq2tracks is a checkpoint-based, samplesheet-driven pipeline that processes raw FASTQ files
 from ChIP-seq, ATAC-seq, CUT&RUN, CUT&TAG, and ChIPmentation assays all the way to bigwig
 tracks, MACS3 peaks (narrow and broad), deepTools post-alignment QC reports, and DiffBind-ready
 samplesheets.
@@ -22,6 +22,8 @@ samplesheets.
 | [07 — Outputs](07_outputs.md) | Output directory tree, file naming conventions, how to read results |
 | [08 — Downstream: DiffBind](08_diffbind.md) | Using pipeline outputs for differential binding analysis |
 | [09 — Troubleshooting](09_troubleshooting.md) | Common errors and fixes, all v3.0.4 bugs documented |
+| [13 — Differential accessibility](13_differential_accessibility.md) | Guidance for DiffBind results, consensus peak counts, and statistical design |
+| [14 — Replicates and design](14_replicates_and_experimental_design.md) | Best practices for biological/technical replicates and batch-aware study design |
 | [10 — Reference file preparation](10_reference_files.md) | Building Bowtie2 indices, blacklist BED files, and chromosome sizes |
 | [11 — Blacklist filtering](11_blacklist_filtering.md) | Blacklist strategy, ENCODE BED files, per-sample column |
 | [12 — Post-alignment QC (deepTools)](12_post_alignment_qc.md) | deepTools QC module: FRiP, fingerprint, PCA, correlation, karyogram |

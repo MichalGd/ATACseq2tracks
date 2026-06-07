@@ -178,9 +178,11 @@ The module runs in four sequential phases:
 - `plotPCA` — genome-wide PCA
 
 **Phase 4 — Consensus peaks and peak-centric QC**
-- Merged consensus peak set from all per-replicate peak files
+- Reproducible peak consensus derived from narrow peaks supported by at least two replicates when possible
 - `multiBamSummary BED-file` over consensus peaks + `plotCorrelation` + `plotPCA`
 - `computeMatrix reference-point` + `plotHeatmap` + `plotProfile` over consensus peaks
+- DESeq2 size factor estimation from consensus peak counts
+- Peak-normalised bigwig generation using consensus-block scaling
 - FRiP over consensus peak set for all samples
 
 > **Zero-peak safety:** samples with zero peaks are retained in all summary tables and
@@ -205,13 +207,32 @@ Generates DiffBind-compatible samplesheets from the filtered BAMs and peak files
 
 - Two output CSVs per genome: one for narrow peaks, one for broad
 - Control BAM paths resolved per-sample using the samplesheet `control_id` and `replicate`
+- Preserves optional `batch` metadata if provided in the samplesheet
 - Output: `diffbind/diffbind_samplesheet_<genome>_<narrow|broad>.csv`
 
 See [Downstream: DiffBind](08_diffbind.md) for usage.
 
 ---
 
-## Step 12 — UCSC track hub
+## Step 12 — DiffBind differential analysis
+
+**Scripts:** `scripts/diffbind_analysis.sh`, `scripts/diffbind_analysis.R`
+
+Runs differential accessibility analysis on the prepared DiffBind samplesheets.
+
+- Reads the prefabricated DiffBind CSVs from `diffbind/`
+- Counts reads over peaks using `DiffBind::dba.count()`
+- Normalises using DiffBind defaults
+- Builds contrasts by `Condition`
+- Runs `DiffBind::dba.analyze()` and exports results
+- Generates PCA, heatmap, MA plot, and volcano plot
+- Output: `diffbind_results/<sample_sheet>/`
+
+See [13 — Differential accessibility](13_differential_accessibility.md).
+
+---
+
+## Step 13 — UCSC track hub
 
 **Script:** `scripts/create_ucsc_tracks.sh`
 

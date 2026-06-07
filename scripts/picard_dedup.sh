@@ -1,5 +1,5 @@
 #!/bin/bash
-# fastq2tracks v3.0.2 — Picard MarkDuplicates (single sample)
+# ATACseq2tracks v3.0.2 — Picard MarkDuplicates (single sample)
 # Usage: bash scripts/picard_dedup.sh <inDir> <outDir> <bam_basename>
 set -euo pipefail
 _load_config() {
@@ -9,7 +9,7 @@ _load_config() {
         local _d; _d="$(cd "$(dirname "${BASH_SOURCE[1]}")" && pwd)"
         local _c="${_d}/../config/config.conf"
         [[ -f "$_c" ]] && source "$_c" || {
-            echo "ERROR: config.sh not found. Export F2T_CONFIG or pass --config to fastq2tracks.sh." >&2
+            echo "ERROR: config.sh not found. Export F2T_CONFIG or pass --config to atacseq2tracks.sh." >&2
             exit 1
         }
     fi

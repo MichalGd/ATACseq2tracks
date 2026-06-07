@@ -1,4 +1,5 @@
-name: fastq2tracks
+
+name: ATACseq2tracks
 channels:
   - bioconda
   - conda-forge

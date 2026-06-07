@@ -41,6 +41,9 @@
 ├── bigwig/                            # Per-replicate bigwig tracks
 │   └── <sample_id>_bioR<N>_dedup_blFilt.bw
 │
+├── bigwig_peaknorm/                   # Peak-normalised bigwig tracks
+│   └── <sample_id>_bioR<N>_dedup_blFilt_peaknorm.bw
+│
 ├── bigwig_merged/                     # Condition-group merged bigwig tracks
 │   └── <factor>__<condition>__<treatment>__<cell_type>__<genome>.bw
 │
@@ -64,6 +67,7 @@
 │   │   ├── qc_summary.tsv             # Per-sample: reads, dup%, mito%, peaks, FRiP
 │   │   ├── qc_warnings.tsv            # Flagged samples with warning codes
 │   │   ├── frip_consensus.tsv         # FRiP over merged consensus peak set
+│   │   ├── consensus_sizeFactors.tsv  # DESeq2 consensus peak size factors
 │   │   ├── per_chromosome_reads.tsv   # Read counts per chromosome per sample
 │   │   └── fingerprint_metrics.tsv    # deepTools fingerprint raw values
 │   ├── plots/
@@ -80,6 +84,8 @@
 │   ├── matrices/
 │   │   ├── bins_summary.npz
 │   │   ├── peaks_summary.npz
+│   │   ├── consensus_peak_counts.tsv
+│   │   ├── consensus_peak_normCounts.tsv
 │   │   └── signal_matrix.gz
 │   ├── peak_sets/
 │   │   ├── merged_narrow.bed

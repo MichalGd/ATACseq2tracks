@@ -1,4 +1,4 @@
-fastq2tracks v3.0.3 — Config / Samplesheet directory
+ATACseq2tracks v3.0.3 — Config / Samplesheet directory
 =====================================================
 
 Files:
@@ -13,17 +13,17 @@ How to set up a new project
      mkdir -p /home/USER/myproject/config
 
 2. Copy and edit config.conf:
-     cp /path/to/fastq2tracks/config/config.conf /home/USER/myproject/config/
+     cp /path/to/ATACseq2tracks/config/config.conf /home/USER/myproject/config/
      nano /home/USER/myproject/config/config.conf
      # Change: SAMPLESHEET, OUTPUT_DIR, and THREADS_PARALLEL_JOBS as needed
 
 3. Prepare your samplesheet (path must match SAMPLESHEET in config.conf):
-     cp /path/to/fastq2tracks/config/samplesheet_template.csv \
+     cp /path/to/ATACseq2tracks/config/samplesheet_template.csv \
         /home/USER/myproject/config/samplesheet.csv
      # Fill in one row per FASTQ file / tech-rep pair
 
 4. Run — only ONE argument needed:
-     bash /path/to/fastq2tracks/fastq2tracks.sh \
+     bash /path/to/ATACseq2tracks/atacseq2tracks.sh \
           --config /home/USER/myproject/config/config.conf
 
 Multiple users on the same server

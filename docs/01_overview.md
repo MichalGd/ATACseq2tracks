@@ -4,9 +4,9 @@
 
 ---
 
-## What is fastq2tracks?
+## What is ATACseq2tracks?
 
-**fastq2tracks** is a modular, checkpoint-resumable pipeline that converts raw FASTQ files from chromatin-profiling assays into analysis-ready outputs:
+**ATACseq2tracks** is a modular, checkpoint-resumable pipeline that converts raw FASTQ files from chromatin-profiling assays into analysis-ready outputs:
 
 - Normalised **bigwig tracks** for genome browsers (individual replicates and merged)
 - **MACS2 peaks** in both narrow and broad format for every IP sample
@@ -70,7 +70,7 @@ flowchart TD
 
 | Principle | Implementation |
 |---|---|
-| **Single entry point** | `fastq2tracks.sh --config config.conf` runs everything |
+| **Single entry point** | `atacseq2tracks.sh --config config.conf` runs everything |
 | **No hardcoded paths** | All paths and parameters in `config/config.conf` |
 | **Safe resume** | `.checkpoints/stepN.done` flags; failed/removed steps rerun |
 | **Mixed genomes** | hg38 and mm39 rows can coexist in one samplesheet |
@@ -80,11 +80,11 @@ flowchart TD
 
 ---
 
-## fastq2tracks vs rnaseq2tracksP
+## ATACseq2tracks vs rnaseq2tracksP
 
 Both pipelines share the same samplesheet-driven, config-file-parameterised, checkpoint-resumable design and can be run on samples from the same experiment.
 
-| Feature | **fastq2tracks** | **rnaseq2tracksP** |
+| Feature | **ATACseq2tracks** | **rnaseq2tracksP** |
 |---|---|---|
 | Assay | ChIP-seq, ATAC-seq, CUT&RUN, CUT&TAG | RNA-seq |
 | Aligner | Bowtie2 (gapped-free) | STAR / HISAT2 (splice-aware) |
