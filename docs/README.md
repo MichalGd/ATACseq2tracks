@@ -1,58 +1,25 @@
-# ATACseq2tracks — Documentation Index
+# ATACseq2tracks documentation
 
-Welcome to the **ATACseq2tracks** documentation.
-
-ATACseq2tracks is a checkpoint-based, samplesheet-driven pipeline that processes raw FASTQ files
-from ChIP-seq, ATAC-seq, CUT&RUN, CUT&TAG, and ChIPmentation assays all the way to bigwig
-tracks, MACS3 peaks (narrow and broad), deepTools post-alignment QC reports, and DiffBind-ready
-samplesheets.
-
----
-
-## Documentation pages
+Current prepared version: **3.2.0 release candidate**.
 
 | Page | Contents |
 |---|---|
-| [01 — Overview](01_overview.md) | What the pipeline does, design principles, comparison with rnaseq2tracksP |
+| [01 — Overview](01_overview.md) | Scope, outputs, workflow sequence and limitations |
 | [02 — Quick start](02_quickstart.md) | Fastest path from installation to first run |
-| [03 — Installation](03_installation.md) | Conda environment, R packages, reference files |
-| [04 — Input files](04_inputs.md) | Samplesheet format (17 columns), column reference, config parameters |
-| [05 — Running the pipeline](05_running.md) | Launch commands, monitoring, resume, partial reruns |
-| [06 — Pipeline steps](06_pipeline_steps.md) | Every step explained with inputs, outputs, and key logic |
-| [07 — Outputs](07_outputs.md) | Output directory tree, file naming conventions, how to read results |
-| [08 — Downstream: DiffBind](08_diffbind.md) | Using pipeline outputs for differential binding analysis |
-| [09 — Troubleshooting](09_troubleshooting.md) | Common errors and fixes, all v3.0.4 bugs documented |
-| [13 — Differential accessibility](13_differential_accessibility.md) | Guidance for DiffBind results, consensus peak counts, and statistical design |
-| [14 — Replicates and design](14_replicates_and_experimental_design.md) | Best practices for biological/technical replicates and batch-aware study design |
-| [10 — Reference file preparation](10_reference_files.md) | Building Bowtie2 indices, blacklist BED files, and chromosome sizes |
-| [11 — Blacklist filtering](11_blacklist_filtering.md) | Blacklist strategy, ENCODE BED files, per-sample column |
-| [12 — Post-alignment QC (deepTools)](12_post_alignment_qc.md) | deepTools QC module: FRiP, fingerprint, PCA, correlation, karyogram |
+| [03 — Installation](03_installation.md) | Conda, R and reference requirements |
+| [04 — Inputs](04_inputs.md) | Samplesheet and configuration variables |
+| [05 — Running](05_running.md) | Launch, monitoring and checkpoint resume |
+| [06 — Pipeline stages](06_pipeline_steps.md) | Stage-by-stage implementation |
+| [07 — Outputs](07_outputs.md) | Output layout and file interpretation |
+| [08 — DiffBind](08_diffbind.md) | DiffBind usage |
+| [09 — Troubleshooting](09_troubleshooting.md) | Common failures and recovery |
+| [10 — References](10_reference_files.md) | Bowtie2 indices, GTF, chromosome sizes and blacklists |
+| [11 — Blacklist filtering](11_blacklist_filtering.md) | Filtering policy and sources |
+| [12 — Post-alignment QC](12_post_alignment_qc.md) | deepTools, TSS enrichment and periodicity QC |
+| [13 — Differential accessibility](13_differential_accessibility.md) | Statistical design and results |
+| [14 — Replicates and design](14_replicates_and_experimental_design.md) | Biological/technical replication guidance |
+| [3.2.0 manifest](update_3.2.0/UPDATE_MANIFEST.md) | Baseline, changed/new files and removals |
+| [3.2.0 application guide](update_3.2.0/APPLY_UPDATE.md) | Safe update and acceptance testing |
+| [3.2.0 critical scope](update_3.2.0/MINIMAL_CRITICAL_IMPROVEMENTS.md) | Scientific decisions and remaining limitations |
 
----
-
-## Quick navigation
-
-- **New user?** Start with [Quick start](02_quickstart.md)
-- **Setting up a server?** See [Installation](03_installation.md) and [Reference file preparation](10_reference_files.md)
-- **Preparing your samplesheet?** See [Input files](04_inputs.md)
-- **Something failed?** See [Troubleshooting](09_troubleshooting.md)
-- **Pipeline ran — what do I have?** See [Outputs](07_outputs.md)
-- **Understanding QC outputs?** See [Post-alignment QC](12_post_alignment_qc.md)
-- **Running differential binding?** See [Downstream: DiffBind](08_diffbind.md)
-
----
-
-## Version notes
-
-Current version: **v3.1.0** — See [CHANGELOG](../CHANGELOG.md) for full history.
-
-**Upgrading from v3.0.x?** Key breaking changes in v3.1.0:
-- The `chipqc_annotation` samplesheet column has been **removed** (samplesheet is now 17 columns)
-- `THREADS_DEEPTOOLS` must be added to `config.conf`
-- ChIPQC replaced by deepTools in Step 10 — R/Bioconductor no longer required for QC
-
-See [CHANGELOG](../CHANGELOG.md) for the full upgrade checklist.
-
----
-
-Back to [main README](../README.md)
+For first use, read the [main README](../README.md), then follow the [application and acceptance guide](update_3.2.0/APPLY_UPDATE.md).

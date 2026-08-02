@@ -50,9 +50,7 @@ PICARD_JAR="/path/to/picard.jar"
 THREADS_DEEPTOOLS=8
 ```
 
-> The ChIPQC RDS annotation variables (`CHIPQC_ANNOTATION_HG38`, `CHIPQC_BLACKLIST_HG38_RDS`) are
-> **no longer required** for the QC step. They are only needed if you run the legacy
-> `run_chipqc.R` script manually outside the pipeline.
+> ChIPQC RDS annotation variables are unsupported and should be removed from current configuration files. The retired `run_chipqc.R` implementation is available only through older Git history.
 
 ---
 

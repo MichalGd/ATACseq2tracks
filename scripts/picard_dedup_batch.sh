@@ -1,5 +1,5 @@
 #!/bin/bash
-# ATACseq2tracks v3.0.4 — Picard deduplication batch
+# ATACseq2tracks v3.2.0 - Picard deduplication batch
 # PATCHED: samtools quickcheck guard before addreplacerg;
 #          tolerant wait loop so one failed RG job doesn't kill the whole batch
 # Usage: bash scripts/picard_dedup_batch.sh [max_jobs]
@@ -27,11 +27,11 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_DIR/main.log"; }
 
 declare -a pids=()
 wait_slot() {
-while [[ ${#pids[@]} -ge $MAX_JOBS ]]; do
-local new=()
-for p in "${pids[@]}"; do kill -0 "$p" 2>/dev/null && new+=("$p"); done
-pids=("${new[@]+"${new[@]}"}"); sleep 2
-done
+if [[ ${#pids[@]} -ge $MAX_JOBS ]]; then
+    local first="${pids[0]}"
+    wait "$first" || { log "FATAL: Picard job PID $first failed"; exit 1; }
+    pids=("${pids[@]:1}")
+fi
 }
 
 # Collect only original BAMs — exclude *_rg.bam and *_dedup.bam
@@ -71,7 +71,7 @@ rg_fail=0
 for p in "${rg_pids[@]+"${rg_pids[@]}"}"; do
 wait "$p" || { log "WARNING: RG tag job PID $p failed"; rg_fail=$((rg_fail+1)); }
 done
-[[ $rg_fail -gt 0 ]] && log "WARNING: $rg_fail RG job(s) failed — affected samples will be skipped in dedup step"
+[[ $rg_fail -gt 0 ]] && { log "FATAL: $rg_fail read-group job(s) failed"; exit 1; }
 log "RG tags complete"
 
 # Step 2: Picard dedup on *_rg.bam -> /_dedup.bam
@@ -83,11 +83,13 @@ base=$(basename "$rg_bam" _rg.bam)
 wait_slot
 
 (
-java -Xmx8g -jar "${PICARD_JAR}" MarkDuplicates \
+java "${PICARD_XMX:--Xmx8g}" -jar "${PICARD_JAR}" MarkDuplicates \
 INPUT="$rg_bam" \
 OUTPUT="${OUT}/${base}_dedup.bam" \
 METRICS_FILE="${LOG_DIR}/${base}_dup_metrics.txt" \
 REMOVE_DUPLICATES=true \
+OPTICAL_DUPLICATE_PIXEL_DISTANCE="${PICARD_OPTICAL_DISTANCE:-100}" \
+TMP_DIR="${PICARD_TMP:-/tmp}" \
 ASSUME_SORTED=true \
 VALIDATION_STRINGENCY=LENIENT \
 > "$LOG_DIR/${base}_picard.log" 2>&1
@@ -96,5 +98,9 @@ samtools index "${OUT}/${base}_dedup.bam" >> "$LOG_DIR/${base}_picard.log" 2>&1
 pids+=($!)
 log "STARTED dedup: $base"
 done
-for p in "${pids[@]+"${pids[@]}"}"; do wait "$p" || true; done
+dedup_fail=0
+for p in "${pids[@]+"${pids[@]}"}"; do
+    wait "$p" || { log "ERROR: Picard job PID $p failed"; dedup_fail=$((dedup_fail + 1)); }
+done
+[[ $dedup_fail -gt 0 ]] && { log "FATAL: $dedup_fail Picard job(s) failed"; exit 1; }
 log "=== Picard batch complete ==="

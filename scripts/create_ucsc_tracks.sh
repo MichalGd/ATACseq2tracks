@@ -1,12 +1,23 @@
-#!/bin/bash
-# ATACseq2tracks v3.0.2 — UCSC BigWig track line generator (no config needed)
-# Usage: bash scripts/create_ucsc_tracks.sh <bigwigDir> [url_base]
+#!/usr/bin/env bash
+# ATACseq2tracks v3.2.0 - UCSC custom-track definitions for bigWig outputs
+# Usage: create_ucsc_tracks.sh <bigwig_dir> [public_url_base] [description_prefix]
 set -euo pipefail
-OUT="$1"; URL_BASE="${2:-http://your-server.com/data}"
-TRACK_FILE="${OUT}/ucsc_tracks.txt"
-> "$TRACK_FILE"
-find "$OUT" -name "*.bw" | sort | while read -r bw; do
-    name=$(basename "$bw" .bw)
-    echo "track type=bigWig name=\"${name}\" description=\"${name}\" bigDataUrl=${URL_BASE}/$(basename "$bw") visibility=full autoScale=on" >> "$TRACK_FILE"
-done
-echo "UCSC track lines written to: $TRACK_FILE"
+BIGWIG_DIR="${1:?bigWig directory required}"; URL_BASE="${2:-}"; PREFIX="${3:-ATAC-seq}"
+[[ -d "$BIGWIG_DIR" ]] || { echo "ERROR: directory not found: $BIGWIG_DIR" >&2; exit 1; }
+TRACK_FILE="${BIGWIG_DIR}/ucsc_tracks.txt"; : > "$TRACK_FILE"; count=0
+while IFS= read -r bw; do
+    file="$(basename "$bw")"; name="${file%.bw}"; url="$file"
+    [[ -n "$URL_BASE" ]] && url="${URL_BASE%/}/${file}"
+    if [[ "$name" == *_DESeq2Consensus ]]; then
+        description="${PREFIX} DESeq2 consensus-peak normalized"; color="180,50,50"
+    elif [[ "$name" == *_RPM ]]; then
+        description="${PREFIX} reads per million"; color="40,90,180"
+    else
+        description="${PREFIX} bigWig"; color="80,80,80"
+    fi
+    printf 'track type=bigWig name="%s" description="%s: %s" bigDataUrl=%s visibility=full autoScale=on alwaysZero=on color=%s\n' \
+        "$name" "$description" "$name" "$url" "$color" >> "$TRACK_FILE"
+    count=$((count + 1))
+done < <(find "$BIGWIG_DIR" -maxdepth 1 -type f -name '*.bw' | sort)
+(( count > 0 )) || { echo "ERROR: no bigWig files found in $BIGWIG_DIR" >&2; exit 1; }
+echo "UCSC custom tracks: $TRACK_FILE ($count tracks)"

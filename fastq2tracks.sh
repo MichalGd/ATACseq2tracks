@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# ATACseq2tracks v3.0.4
+# ATACseq2tracks v3.2.0
 # ATAC-seq / chromatin profiling track-generation and QC workflow
 #
 # Usage:
@@ -17,6 +17,7 @@ set -euo pipefail
 INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_DIR="${INSTALL_DIR}/scripts"
 F2T_CONFIG=""
+PIPELINE_VERSION="$(tr -d '[:space:]' < "${INSTALL_DIR}/VERSION" 2>/dev/null || echo 3.2.0)"
 
 usage() {
     echo "Usage: bash atacseq2tracks.sh --config /absolute/path/to/config.conf"
@@ -42,7 +43,7 @@ source "$F2T_CONFIG"
 [[ -f "$SAMPLESHEET"     ]] || { echo "ERROR: SAMPLESHEET not found: $SAMPLESHEET" >&2; exit 1; }
 
 echo "============================================================"
-echo " ATACseq2tracks v3.0.4"
+echo " ATACseq2tracks v${PIPELINE_VERSION}"
 echo " Install dir : $INSTALL_DIR"
 echo " Config      : $F2T_CONFIG"
 echo " Samplesheet : $SAMPLESHEET"
@@ -53,10 +54,11 @@ echo "============================================================"
 # ── Checkpoint helpers ────────────────────────────────────────────────────────
 CHECKPOINT_DIR="${OUTPUT_DIR}/.checkpoints"
 mkdir -p "$CHECKPOINT_DIR"
+RUN_SIGNATURE="$(sha256sum "$SAMPLESHEET" "$F2T_CONFIG" "${INSTALL_DIR}/VERSION" | sha256sum | awk '{print $1}')"
 
-is_done()   { [[ -f "${CHECKPOINT_DIR}/step${1}.done" ]]; }
+is_done()   { [[ -f "${CHECKPOINT_DIR}/step${1}.done" ]] && [[ "$(cat "${CHECKPOINT_DIR}/step${1}.done")" == "$RUN_SIGNATURE" ]]; }
 mark_done() {
-    touch "${CHECKPOINT_DIR}/step${1}.done"
+    printf '%s\n' "$RUN_SIGNATURE" > "${CHECKPOINT_DIR}/step${1}.done"
     echo "[CHECKPOINT] Step ${1} complete -- to re-run: rm ${CHECKPOINT_DIR}/step${1}.done"
 }
 skip_msg()  { echo "=== [${1}] SKIPPED (already complete -- checkpoint exists) ==="; }
@@ -76,7 +78,7 @@ mkdir -p \
     "${OUTPUT_DIR}/bedGraph" \
     "${OUTPUT_DIR}/NormBedGraph" \
     "${OUTPUT_DIR}/bigwig" \
-    "${OUTPUT_DIR}/bigwig_peaknorm" \
+    "${OUTPUT_DIR}/bigwig_deseq2_consensus" \
     "${OUTPUT_DIR}/bigwig_merged" \
     "${OUTPUT_DIR}/peaks/per_replicate" \
     "${OUTPUT_DIR}/peaks/pooled" \
@@ -97,7 +99,7 @@ bash "${SCRIPT_DIR}/smoke_test.sh" "$SAMPLESHEET" "$F2T_CONFIG"
 if is_done 1; then skip_msg 1; else
     echo "=== [1] FastQC (raw) ==="
     bash "${SCRIPT_DIR}/fastqc_batch.sh" \
-        "$RAW_FASTQ_DIR" "${OUTPUT_DIR}/fastQC/fastQC_unTrimmed" "${THREADS_PARALLEL_JOBS}"
+        "$RAW_FASTQ_DIR" "${OUTPUT_DIR}/fastQC/fastQC_unTrimmed" "${THREADS_PARALLEL_JOBS}" samplesheet
     multiqc "${OUTPUT_DIR}/fastQC/fastQC_unTrimmed" -n multiQC_unTrimmed \
         -o "${OUTPUT_DIR}/multiQC/multiQC_unTrimmed" --data-format tsv --export
     mark_done 1
@@ -115,7 +117,7 @@ fi
 if is_done 3; then skip_msg 3; else
     echo "=== [3] FastQC (trimmed) ==="
     bash "${SCRIPT_DIR}/fastqc_batch.sh" \
-        "${OUTPUT_DIR}/trimmedFastq" "${OUTPUT_DIR}/fastQC/fastQC_trimmed" "${THREADS_PARALLEL_JOBS}"
+        "${OUTPUT_DIR}/trimmedFastq" "${OUTPUT_DIR}/fastQC/fastQC_trimmed" "${THREADS_PARALLEL_JOBS}" directory
     multiqc "${OUTPUT_DIR}/fastQC/fastQC_trimmed" -n multiQC_trimmed \
         -o "${OUTPUT_DIR}/multiQC/multiQC_trimmed" --data-format tsv --export
     mark_done 3
@@ -154,8 +156,6 @@ if is_done 7; then skip_msg 7; else
     echo "=== [7] Genome coverage (individual) ==="
     bash "${SCRIPT_DIR}/genomecoverage_batch.sh" \
         "$SAMPLESHEET" "${OUTPUT_DIR}/filteredBams" "${OUTPUT_DIR}/bigwig"
-    mv "${OUTPUT_DIR}/bigwig/"*.bedGraph.gz       "${OUTPUT_DIR}/bedGraph/"     2>/dev/null || true
-    mv "${OUTPUT_DIR}/bigwig/"*Snorm*.bedGraph.gz "${OUTPUT_DIR}/NormBedGraph/" 2>/dev/null || true
     mark_done 7
 fi
 
@@ -170,9 +170,9 @@ if is_done 8; then skip_msg 8; else
     mark_done 8
 fi
 
-# ── Step 9: MACS2 ─────────────────────────────────────────────────────────────
+# ── Step 9: MACS3 (legacy script name retained) ──────────────────────────────
 if is_done 9; then skip_msg 9; else
-    echo "=== [9] MACS2 peak calling (narrow + broad) ==="
+    echo "=== [9] MACS3 peak calling (sample-sheet mode) ==="
     bash "${SCRIPT_DIR}/macs2_batch.sh" \
         "$SAMPLESHEET" "${OUTPUT_DIR}/filteredBams" "${OUTPUT_DIR}/peaks"
     mark_done 9
@@ -187,6 +187,18 @@ if is_done 10; then skip_msg 10; else
         "${OUTPUT_DIR}/peaks" \
         "${OUTPUT_DIR}/bigwig" \
         "${OUTPUT_DIR}/qc_post_alignment"
+    if [[ "${RUN_ATAQV_QC:-true}" == "true" ]]; then
+        echo "=== [10] ATAC-specific QC (TSS enrichment and fragment periodicity) ==="
+        bash "${SCRIPT_DIR}/ataqv_qc_batch.sh" \
+            "$SAMPLESHEET" "${OUTPUT_DIR}/filteredBams" "${OUTPUT_DIR}/peaks" \
+            "${OUTPUT_DIR}/qc_post_alignment/atac_qc"
+    fi
+    RUN_GENOME="$(tail -n +2 "$SAMPLESHEET" | head -1 | cut -d',' -f5 | tr -d '"')"
+    if [[ "${RUN_PEAK_ANNOTATION:-false}" == "true" || "${RUN_MOTIF_ENRICHMENT:-false}" == "true" ]]; then
+        bash "${SCRIPT_DIR}/peak_interpretation.sh" \
+            "${OUTPUT_DIR}/qc_post_alignment/peak_sets/consensus_peaks.bed" \
+            "$RUN_GENOME" "${OUTPUT_DIR}/peak_interpretation"
+    fi
     mark_done 10
 fi
 # ── Step 11: DiffBind prep ────────────────────────────────────────────────────
@@ -213,9 +225,17 @@ fi
 if is_done 13; then skip_msg 13; else
     echo "=== [13] UCSC tracks ==="
     bash "${SCRIPT_DIR}/create_ucsc_tracks.sh" \
-        "${OUTPUT_DIR}/bigwig"        "http://your-server.com/data"
-    bash "${SCRIPT_DIR}/create_ucsc_tracks.sh" \
-        "${OUTPUT_DIR}/bigwig_merged" "http://your-server.com/data/merged"
+        "${OUTPUT_DIR}/bigwig" "${UCSC_BIGDATA_URL_BASE:-}" "${UCSC_TRACK_PREFIX:-ATAC-seq} RPM"
+    if find "${OUTPUT_DIR}/bigwig_deseq2_consensus" -maxdepth 1 -name '*.bw' -print -quit | grep -q .; then
+        DESEQ2_URL="${UCSC_BIGDATA_URL_BASE:+${UCSC_BIGDATA_URL_BASE%/}/deseq2_consensus}"
+        bash "${SCRIPT_DIR}/create_ucsc_tracks.sh" \
+            "${OUTPUT_DIR}/bigwig_deseq2_consensus" "$DESEQ2_URL" "${UCSC_TRACK_PREFIX:-ATAC-seq} DESeq2 consensus"
+    fi
+    if find "${OUTPUT_DIR}/bigwig_merged" -maxdepth 1 -name '*.bw' -print -quit | grep -q .; then
+        MERGED_URL="${UCSC_BIGDATA_URL_BASE:+${UCSC_BIGDATA_URL_BASE%/}/merged}"
+        bash "${SCRIPT_DIR}/create_ucsc_tracks.sh" \
+            "${OUTPUT_DIR}/bigwig_merged" "$MERGED_URL" "${UCSC_TRACK_PREFIX:-ATAC-seq} merged RPM"
+    fi
     mark_done 13
 fi
 
@@ -228,6 +248,7 @@ if is_done 14; then skip_msg 14; else
 fi
 
 # ── Cleanup ───────────────────────────────────────────────────────────────────
+if [[ "${ENABLE_AUTOMATIC_CLEANUP:-false}" == "true" ]]; then
 [[ "${KEEP_INTERMEDIATE_BAMS:-false}" == "false" ]] && \
     rm -f "${OUTPUT_DIR}/bams/"*.bam "${OUTPUT_DIR}/bams/"*.bai 2>/dev/null || true
 [[ "${KEEP_TRIMMED_FASTQ:-false}" == "false" ]] && \
@@ -238,15 +259,18 @@ fi
     rm -f "${OUTPUT_DIR}/filteredBams/"*.bam "${OUTPUT_DIR}/filteredBams/"*.bai 2>/dev/null || true
 [[ "${KEEP_RAW_BEDGRAPH:-false}" == "false" ]] && \
     rm -f "${OUTPUT_DIR}/bedGraph/"*.bedGraph.gz 2>/dev/null || true
+fi
 
 echo ""
-echo "=== ATACseq2tracks v3.0.4 complete ==="
+echo "=== ATACseq2tracks v${PIPELINE_VERSION} complete ==="
 echo "  Checkpoints   : ${CHECKPOINT_DIR}/"
-echo "  BigWig        : ${OUTPUT_DIR}/bigwig/"
+echo "  BigWig RPM    : ${OUTPUT_DIR}/bigwig/"
+echo "  BigWig DESeq2 : ${OUTPUT_DIR}/bigwig_deseq2_consensus/"
 echo "  BigWig merged : ${OUTPUT_DIR}/bigwig_merged/"
 echo "  Peaks narrow  : ${OUTPUT_DIR}/peaks/per_replicate/<sample>/narrow/"
 echo "  Peaks broad   : ${OUTPUT_DIR}/peaks/per_replicate/<sample>/broad/"
 echo "  QC deepTools     : ${OUTPUT_DIR}/qc_post_alignment/"
+echo "  QC TSS/periodicity: ${OUTPUT_DIR}/qc_post_alignment/atac_qc/"
 echo "  DiffBind samples : ${OUTPUT_DIR}/diffbind/"
 echo "  DiffBind results : ${OUTPUT_DIR}/diffbind_results/"
 echo "  Report           : ${OUTPUT_DIR}/reports/"

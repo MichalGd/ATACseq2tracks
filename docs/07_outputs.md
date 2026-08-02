@@ -6,6 +6,8 @@
 
 ## Output directory tree
 
+> v3.2.0 naming: RPM tracks end in `_RPM.bw`; consensus-scaled tracks are stored in `bigwig_deseq2_consensus/` and end in `_DESeq2Consensus.bw`. ATAC-specific QC is under `qc_post_alignment/atac_qc/`, including `tables/ataqv_selected_metrics.tsv`, `tables/nucleosome_periodicity_metrics.tsv`, compressed `ataqv_metrics/*.ataqv.json.gz`, static fragment-periodicity PNG/PDF plots, and the optional `ataqv_viewer/`.
+
 ```
 <OUTPUT_DIR>/
 │
@@ -39,10 +41,10 @@
 ├── NormBedGraph/                      # Library-size normalised bedGraphs
 │
 ├── bigwig/                            # Per-replicate bigwig tracks
-│   └── <sample_id>_bioR<N>_dedup_blFilt.bw
+│   └── <sample_id>_bioR<N>_dedup_blFilt_RPM.bw
 │
-├── bigwig_peaknorm/                   # Peak-normalised bigwig tracks
-│   └── <sample_id>_bioR<N>_dedup_blFilt_peaknorm.bw
+├── bigwig_deseq2_consensus/           # DESeq2 consensus-peak-scaled bigWig tracks
+│   └── <sample_id>_bioR<N>_dedup_blFilt_DESeq2Consensus.bw
 │
 ├── bigwig_merged/                     # Condition-group merged bigwig tracks
 │   └── <factor>__<condition>__<treatment>__<cell_type>__<genome>.bw

@@ -1,38 +1,26 @@
-#!/bin/bash
-# ATACseq2tracks v3.0.2 — Genome coverage: bedGraph + RPM bigWig
-# Usage: bash scripts/genomecoverage_single.sh <bam> <hg38|mm39> <outDir>
+#!/usr/bin/env bash
+# ATACseq2tracks v3.2.0 - fragment-aware RPM/CPM bigWig for UCSC/IGV
+# Usage: genomecoverage_single.sh <filtered.bam> <genome> <output_dir>
 set -euo pipefail
-_load_config() {
-    if [[ -n "${F2T_CONFIG:-}" && -f "${F2T_CONFIG}" ]]; then
-        source "${F2T_CONFIG}"
-    else
-        local _d; _d="$(cd "$(dirname "${BASH_SOURCE[1]}")" && pwd)"
-        local _c="${_d}/../config/config.conf"
-        [[ -f "$_c" ]] && source "$_c" || {
-            echo "ERROR: config.sh not found. Export F2T_CONFIG or pass --config to atacseq2tracks.sh." >&2
-            exit 1
-        }
-    fi
-}
-_load_config
-
-BAM="$1"; GENOME="$2"; OUT="$3"
-SAMPLE=$(basename "$BAM" .bam)
-mkdir -p "$OUT"
-if   [[ "$GENOME" == "hg38" ]]; then CHROM_SIZES="$CHROM_SIZES_HUMAN"; STD_CHR="chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 chr11 chr12 chr13 chr14 chr15 chr16 chr17 chr18 chr19 chr20 chr21 chr22 chrX chrY"
-elif [[ "$GENOME" == "mm39" ]]; then CHROM_SIZES="$CHROM_SIZES_MOUSE"; STD_CHR="chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 chr11 chr12 chr13 chr14 chr15 chr16 chr17 chr18 chr19 chrX chrY"
-else echo "ERROR: Unknown genome $GENOME" >&2; exit 1; fi
-samtools index -@ "${THREADS_BIGWIG}" "$BAM" 2>/dev/null || true
-STD_BAM="${OUT}/${SAMPLE}_stChr.bam"
-samtools view -@ "${THREADS_BIGWIG}" -b "$BAM" $STD_CHR -o "$STD_BAM"
-samtools index -@ "${THREADS_BIGWIG}" "$STD_BAM"
-bedtools genomecov -ibam "$BAM" -bga | gzip > "${OUT}/${SAMPLE}.bedGraph.gz"
-READS=$(samtools view -@ "${THREADS_BIGWIG}" -c "$STD_BAM")
-SCALE=$(awk "BEGIN {printf \"%.10f\", 1000000/$READS}")
-bedtools genomecov -ibam "$STD_BAM" -bga -scale "$SCALE" > "${OUT}/${SAMPLE}_norm.bedGraph"
-awk '$1~/^chr/' "${OUT}/${SAMPLE}_norm.bedGraph" | \
-    LC_COLLATE=C sort -k1,1 -k2,2n > "${OUT}/${SAMPLE}_Snorm.bedGraph"
-"${BEDGRAPH_TO_BIGWIG}" "${OUT}/${SAMPLE}_Snorm.bedGraph" "$CHROM_SIZES" "${OUT}/${SAMPLE}_Snorm.bw"
-gzip "${OUT}/${SAMPLE}_Snorm.bedGraph"
-rm -f "$STD_BAM" "${STD_BAM}.bai" "${OUT}/${SAMPLE}_norm.bedGraph"
-echo "Coverage done: ${SAMPLE} reads=${READS} scale=${SCALE}"
+[[ -n "${F2T_CONFIG:-}" && -f "$F2T_CONFIG" ]] || { echo "ERROR: F2T_CONFIG is not set" >&2; exit 1; }
+# shellcheck disable=SC1090
+source "$F2T_CONFIG"
+BAM="${1:?BAM required}"; GENOME="${2:?genome required}"; OUT="${3:?output directory required}"
+SAMPLE="$(basename "$BAM" .bam)"; THREADS="${THREADS_BIGWIG:-2}"; BIN_SIZE="${TRACK_BIN_SIZE:-10}"
+mkdir -p "$OUT"; samtools quickcheck "$BAM"
+tmp_dir="$(mktemp -d "${OUT}/.${SAMPLE}.rpm.XXXXXX")"; trap 'rm -rf "$tmp_dir"' EXIT
+track_bam="$BAM"
+if [[ "${TRACK_STANDARD_CHROMS_ONLY:-true}" == "true" ]]; then
+    mapfile -t contigs < <(samtools idxstats "$BAM" | awk '$1~/^chr([0-9]+|X|Y)$/ {print $1}')
+    (( ${#contigs[@]} > 0 )) || { echo "ERROR: no standard chromosomes found in $BAM" >&2; exit 1; }
+    track_bam="${tmp_dir}/${SAMPLE}.standard.bam"
+    samtools view -@ "$THREADS" -b -o "$track_bam" "$BAM" "${contigs[@]}"; samtools index -@ "$THREADS" "$track_bam"
+fi
+out_bw="${OUT}/${SAMPLE}_RPM.bw"
+bamCoverage --bam "$track_bam" --outFileName "$out_bw" --outFileFormat bigwig \
+    --normalizeUsing CPM --binSize "$BIN_SIZE" --numberOfProcessors "$THREADS" \
+    ${BAMCOVERAGE_COMMON_ARGS:-}
+[[ -s "$out_bw" ]] || { echo "ERROR: RPM bigWig was not created: $out_bw" >&2; exit 1; }
+printf 'sample\tgenome\tnormalization\tbin_size\tfile\n%s\t%s\tCPM/RPM\t%s\t%s\n' \
+    "$SAMPLE" "$GENOME" "$BIN_SIZE" "$out_bw" > "${OUT}/${SAMPLE}_RPM.metadata.tsv"
+echo "RPM bigWig: $out_bw"

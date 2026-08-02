@@ -85,8 +85,7 @@ These are the **only** reference file variables required by the v3.1.0 pipeline.
 > **These files are no longer required for the main pipeline as of v3.1.0.**
 > Step 10 (post-alignment QC) now uses deepTools and does not need R annotation objects.
 >
-> The build instructions below are retained for users who wish to run `scripts/run_chipqc.R`
-> manually outside the pipeline (e.g. to reproduce v3.0.x QC results).
+> The build instructions below are historical only. `run_chipqc.R` is not distributed in v3.2.0; use an older Git tag to reproduce v3.0.x ChIPQC results.
 
 ### Build script
 
@@ -158,7 +157,7 @@ This takes approximately 10–20 minutes per genome depending on server speed.
 
 ### Legacy config variables
 
-If running `run_chipqc.R` manually, add these to your config or pass them as arguments:
+Historical v3.0.x configurations used these variables:
 
 ```bash
 CHIPQC_ANNOTATION_HG38="/path/to/ref/AnnotationHub_cache/anno_hg38_chipqc.rds"

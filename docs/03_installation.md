@@ -18,20 +18,20 @@ conda activate ATACseq2tracks
 | bowtie2 | 2.5 | Alignment |
 | samtools | 1.18 | BAM sorting, indexing, merging |
 | bedtools | 2.31 | Blacklist filtering, coverage, FRiP |
-| trim_galore | 2.2.0 | Adapter trimming (SE + PE) |
+| trim_galore | 0.6.10 | Adapter trimming (SE + PE) |
 | fastqc | 0.12 | Read quality control |
 | macs3 | 3.0.4 | Peak calling (narrow + broad) |
 | multiqc | 1.20 | Aggregated QC HTML reports |
 | picard | 3.1 (`.jar`) | Duplicate marking |
 | bedGraphToBigWig | UCSC kent | bigwig conversion |
 | deeptools | 3.5+ | Post-alignment QC (Step 10) |
+| ataqv | 1.3+ | ATAC TSS enrichment and fragment QC (Step 10) |
 | python3 | 3.9+ | Samplesheet validation, karyogram plots |
 | matplotlib | 3.7+ | Chromosome coverage plots (Step 10) |
 | numpy | 1.24+ | Numerical arrays for karyogram plots |
 | pandas | 2.0+ | Table handling for karyogram plots |
 
-> **Note on trim_galore:** Version 2.2.0 ("Oxidized Edition") uses `--output_dir` instead of
-> `-o`. The pipeline scripts are written for this version. Earlier versions will fail at step 2.
+> **Note on Trim Galore:** the Conda environment requires version 0.6.10 or newer.
 
 > **Note on MACS3:** The pipeline calls `macs3` (not `macs2`). MACS3 v3.0.4+ is the
 > Python 3.11-compatible successor to MACS2 with an identical command-line interface.
@@ -41,8 +41,7 @@ conda activate ATACseq2tracks
 
 ## R packages
 
-R and Bioconductor are **only required for DiffBind** (Step 11). They are no longer needed for
-the QC step (Step 10), which now uses deepTools.
+R and Bioconductor are required for DESeq2 consensus-peak size factors in Step 10 and for DiffBind in Steps 11–12. ChIPQC is not required.
 
 ```r
 # Install Bioconductor manager if needed
@@ -50,6 +49,7 @@ if (!require("BiocManager")) install.packages("BiocManager")
 
 # DiffBind and its dependencies
 BiocManager::install(c(
+    "DESeq2",
     "DiffBind",
     "BiocParallel",
     "GenomicAlignments",
@@ -62,7 +62,7 @@ install.packages(c("ggplot2", "dplyr"))
 
 Minimum R version: **4.3**
 
-> If you do not plan to run DiffBind, R and Bioconductor are not required at all.
+> Disabling DiffBind does not remove the R requirement when `GENERATE_DESEQ2_CONSENSUS_TRACKS=true`.
 
 ---
 
@@ -115,10 +115,7 @@ fetchChromSizes mm39 > /path/to/mm39n.chrom.sizes
 
 See [Reference file preparation](10_reference_files.md) for the full download commands.
 
-> **ChIPQC RDS annotation objects** (`CHIPQC_ANNOTATION_HG38`, `CHIPQC_BLACKLIST_HG38_RDS`) are
-> no longer required for the main pipeline (deprecated as of v3.1.0). See
-> [Reference file preparation](10_reference_files.md) if you need them for legacy use of
-> `run_chipqc.R`.
+> ChIPQC and its RDS annotation objects are not part of v3.2.0. Use an older Git tag if historical ChIPQC reproduction is required.
 
 ---
 
