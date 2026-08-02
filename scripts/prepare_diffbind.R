@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # =============================================================================
-# ATACseq2tracks v3.0.4 — DiffBind sample sheet preparation (narrow + broad)
+# ATACseq2tracks v3.2.0 — DiffBind sample sheet preparation (narrow + broad)
 # Usage: Rscript scripts/prepare_diffbind.R <ss.csv> <bamDir> <peaksDir> <outDir> <genome>
 # Produces: diffbind_samplesheet_<genome>_narrow.csv
 #           diffbind_samplesheet_<genome>_broad.csv
@@ -19,7 +19,8 @@ dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 ss    <- read.csv(ss_file, stringsAsFactors = FALSE)
 ss    <- ss[tolower(ss$genome) == genome, ]
 ss_ip <- ss[tolower(ss$is_control) %in% c("false", "0", "no"), ]
-ss_ip <- ss_ip[!duplicated(ss_ip$sample_id), ]   # collapse tech-rep rows
+sample_keys <- paste(ss_ip$sample_id, ss_ip$replicate, sep = "::")
+ss_ip <- ss_ip[!duplicated(sample_keys), ]   # collapse technical rows, retain biological replicates
 
 make_bam <- function(sid, rep, dir) {
     p <- file.path(dir, paste0(sid, "_bioR", rep, "_dedup_blFilt.bam"))
@@ -51,7 +52,7 @@ build_ss <- function(ptype) {
         } else NA_character_
 
         data.frame(
-            SampleID   = sid,
+            SampleID   = paste0(sid, "_bioR", rep),
             Tissue     = ss_ip$cell_type[i],
             Factor     = ss_ip$factor[i],
             Condition  = ss_ip$condition[i],
@@ -59,7 +60,8 @@ build_ss <- function(ptype) {
             Batch      = if ("batch" %in% names(ss_ip)) ss_ip$batch[i] else NA_character_,
             Replicate  = rep,
             bamReads   = make_bam(sid, rep, bam_dir),
-            ControlID  = ifelse(is.na(ctrl_id) | nchar(ctrl_id) == 0, NA_character_, ctrl_id),
+            ControlID  = ifelse(is.na(ctrl_id) | nchar(ctrl_id) == 0, NA_character_,
+                                paste0(ctrl_id, "_bioR", ctrl_rep)),
             bamControl = ifelse(is.na(ctrl_id) | nchar(ctrl_id) == 0, NA_character_,
                                 make_bam(ctrl_id, ctrl_rep, bam_dir)),
             Peaks      = make_peak(sid, rep, peaks_dir, ptype),

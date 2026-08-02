@@ -1,57 +1,63 @@
-#!/bin/bash
-# ATACseq2tracks v3.0.2 — FastQC batch
-# Usage: bash scripts/fastqc_batch.sh <inputDir> <outputDir> [max_jobs]
+#!/usr/bin/env bash
+# ATACseq2tracks v3.2.0 - fail-fast FastQC batch
+# Usage: fastqc_batch.sh <input_dir> <output_dir> [parallel_jobs] [directory|samplesheet]
 set -euo pipefail
-_load_config() {
-    if [[ -n "${F2T_CONFIG:-}" && -f "${F2T_CONFIG}" ]]; then
-        source "${F2T_CONFIG}"
-    else
-        local _d; _d="$(cd "$(dirname "${BASH_SOURCE[1]}")" && pwd)"
-        local _c="${_d}/../config/config.conf"
-        [[ -f "$_c" ]] && source "$_c" || {
-            echo "ERROR: config.sh not found. Export F2T_CONFIG or pass --config to atacseq2tracks.sh." >&2
-            exit 1
-        }
-    fi
-}
-_load_config
 
-IN="$1"; OUT="$2"; MAX_PARAM="${3:-${THREADS_PARALLEL_JOBS}}"
-MAX_JOBS=$((2 * MAX_PARAM)); THREADS="${THREADS_FASTQC}"
-mkdir -p "${OUT}/fastQC"
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S"); LOG_DIR="${OUT}/fastqc_batch_logs_${TIMESTAMP}"
-mkdir -p "$LOG_DIR/individual_jobs"
-log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_DIR/main.log"; }
-declare -a pids=()
-wait_slot() {
-    while [[ ${#pids[@]} -ge $MAX_JOBS ]]; do
-        local new=(); for p in "${pids[@]}"; do kill -0 "$p" 2>/dev/null && new+=("$p"); done
-        pids=("${new[@]+"${new[@]}"}"); sleep 2
-    done
-}
-# Collect only FASTQs referenced in the samplesheet
-SAMPLESHEET_FOR_FQC="${SAMPLESHEET:-}"
-if [[ -n "$SAMPLESHEET_FOR_FQC" && -f "$SAMPLESHEET_FOR_FQC" ]]; then
-    mapfile -t all_files < <(
-        tail -n +2 "$SAMPLESHEET_FOR_FQC" | awk -F',' '{
-            gsub(/"/, "", $2); gsub(/"/, "", $3)
-            if ($2 != "") print $2
-            if ($3 != "") print $3
-        }' | sort -u | while read -r fq; do
-            [[ -f "$fq" ]] && echo "$fq"
-        done
-    )
-else
-    # Fallback: glob entire directory (original behaviour)
-    mapfile -t all_files < <(find "$IN" -maxdepth 1 -type f \( -name "*.fq.gz" -o -name "*.fastq.gz" \) | sort)
+if [[ -n "${F2T_CONFIG:-}" && -f "$F2T_CONFIG" ]]; then
+    # shellcheck disable=SC1090
+    source "$F2T_CONFIG"
 fi
-log "=== FastQC batch: ${#all_files[@]} files ==="
+
+IN="${1:?input directory required}"
+OUT="${2:?output directory required}"
+MAX_JOBS="${3:-${THREADS_PARALLEL_JOBS:-2}}"
+SOURCE_MODE="${4:-directory}"
+THREADS="${THREADS_FASTQC:-2}"
+QC_DIR="${OUT}/fastQC"
+LOG_DIR="${OUT}/fastqc_logs"
+mkdir -p "$QC_DIR" "$LOG_DIR"
+
+log() { printf '[%s] %s\n' "$(date '+%F %T')" "$1" | tee -a "${LOG_DIR}/main.log"; }
+
+declare -a all_files=()
+if [[ "$SOURCE_MODE" == "samplesheet" ]]; then
+    [[ -f "${SAMPLESHEET:-}" ]] || { log "ERROR: SAMPLESHEET is unavailable"; exit 1; }
+    SHEET_DIR="$(cd "$(dirname "$SAMPLESHEET")" && pwd)"
+    while IFS=',' read -r sid fq1 fq2 rest; do
+        [[ "$sid" == "sample_id" ]] && continue
+        for fq in "$fq1" "$fq2"; do
+            fq="${fq//\"/}"
+            [[ -z "$fq" ]] && continue
+            if [[ -f "$fq" ]]; then all_files+=("$fq")
+            elif [[ -f "${IN}/${fq}" ]]; then all_files+=("${IN}/${fq}")
+            elif [[ -f "${SHEET_DIR}/${fq}" ]]; then all_files+=("${SHEET_DIR}/${fq}")
+            else log "ERROR: FASTQ not found: $fq"; exit 1
+            fi
+        done
+    done < "$SAMPLESHEET"
+else
+    mapfile -t all_files < <(find "$IN" -maxdepth 1 -type f \( -name '*.fq.gz' -o -name '*.fastq.gz' \) | sort)
+fi
+
+mapfile -t all_files < <(printf '%s\n' "${all_files[@]}" | awk 'NF && !seen[$0]++')
+(( ${#all_files[@]} > 0 )) || { log "ERROR: no FASTQ files selected"; exit 1; }
+
+declare -a pids=() labels=()
+failures=0
+wait_one() {
+    local pid="${pids[0]}" label="${labels[0]}"
+    if ! wait "$pid"; then log "ERROR: FastQC failed: $label"; failures=$((failures + 1)); fi
+    pids=("${pids[@]:1}")
+    labels=("${labels[@]:1}")
+}
+
 for fq in "${all_files[@]}"; do
-    base=$(basename "$fq" .fq.gz); base=${base%.fastq.gz}
-    [[ -d "${OUT}/fastQC/${base}_fastqc" ]] && { log "SKIP $base"; continue; }
-    wait_slot
-    (fastqc --outdir "${OUT}/fastQC/" --format fastq --threads "$THREADS" "$fq"         > "$LOG_DIR/individual_jobs/${base}.log" 2>&1) &
-    pids+=($!); log "STARTED: $base"
+    base="$(basename "$fq")"; base="${base%.fastq.gz}"; base="${base%.fq.gz}"
+    [[ -s "${QC_DIR}/${base}_fastqc.html" ]] && { log "SKIP: $base"; continue; }
+    while (( ${#pids[@]} >= MAX_JOBS )); do wait_one; done
+    fastqc --outdir "$QC_DIR" --format fastq --threads "$THREADS" "$fq" >"${LOG_DIR}/${base}.log" 2>&1 &
+    pids+=("$!"); labels+=("$base")
 done
-for p in "${pids[@]+"${pids[@]}"}"; do wait "$p" || true; done
-log "=== FastQC batch complete ==="
+while (( ${#pids[@]} > 0 )); do wait_one; done
+(( failures == 0 )) || { log "FATAL: ${failures} FastQC job(s) failed"; exit 1; }
+log "FastQC complete: ${#all_files[@]} files"

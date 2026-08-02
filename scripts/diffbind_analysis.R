@@ -1,5 +1,5 @@
 #!/usr/bin/env Rscript
-# ATACseq2tracks v3.1.x — DiffBind differential accessibility analysis
+# ATACseq2tracks v3.2.0 — explicit DESeq2 differential accessibility analysis
 # Usage: Rscript scripts/diffbind_analysis.R <diffbind_samplesheet.csv> <out_dir>
 
 suppressPackageStartupMessages({
@@ -59,11 +59,11 @@ dba_obj <- dba.contrast(dba_obj, categories = DBA_CONDITION, minMembers = 2)
 
 # Run differential analysis using the default method (DESeq2)
 cat("Running differential analysis...\n")
-dba_obj <- dba.analyze(dba_obj)
+dba_obj <- dba.analyze(dba_obj, method = DBA_DESEQ2)
 
 # Extract results at FDR 0.05
 cat("Extracting differential results...\n")
-res <- dba.report(dba_obj, th = 0.05)
+res <- dba.report(dba_obj, method = DBA_DESEQ2, th = 0.05)
 
 # Write results and optional consensus peak set
 cat("Writing results...\n")

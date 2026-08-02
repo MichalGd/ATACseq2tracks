@@ -1,33 +1,25 @@
-ATACseq2tracks v3.0.3 — Config / Samplesheet directory
-=====================================================
+ATACseq2tracks v3.2.0 configuration directory
+================================================
 
-Files:
-  config.conf                Main configuration — the ONLY file you edit per run.
-  samplesheet_template.csv   Column headers only; copy and fill in.
-  samplesheet_example.csv    Filled-in examples (hg38 PE + mm39 SE).
-  README.txt                 This file.
+Files
+-----
+config.conf                 Main safe configuration template.
+config_temp.conf.template   Identical compatibility template.
+samplesheet_template.csv    Column header template.
+samplesheet_example_atac.csv
+                            Recommended bulk ATAC-seq example.
+samplesheet_example.csv     Historical multi-assay example retained from v3.1.
 
-How to set up a new project
-─────────────────────────────────────────────────────
-1. Create a project config folder anywhere:
-     mkdir -p /home/USER/myproject/config
+Setup
+-----
+1. Copy config.conf and a samplesheet outside the installed code directory.
+2. Set SAMPLESHEET, OUTPUT_DIR, reference paths and software paths.
+3. Configure one genome per run (hg38 or mm39).
+4. Leave TSS_BED_* empty to derive a strand-aware TSS BED from the GTF.
+5. Review cleanup, consensus, track and ATAC-QC defaults explicitly.
+6. Run the main entry point with:
 
-2. Copy and edit config.conf:
-     cp /path/to/ATACseq2tracks/config/config.conf /home/USER/myproject/config/
-     nano /home/USER/myproject/config/config.conf
-     # Change: SAMPLESHEET, OUTPUT_DIR, and THREADS_PARALLEL_JOBS as needed
+   bash /path/to/ATACseq2tracks/atacseq2tracks.sh \
+        --config /path/to/project/config/config.conf
 
-3. Prepare your samplesheet (path must match SAMPLESHEET in config.conf):
-     cp /path/to/ATACseq2tracks/config/samplesheet_template.csv \
-        /home/USER/myproject/config/samplesheet.csv
-     # Fill in one row per FASTQ file / tech-rep pair
-
-4. Run — only ONE argument needed:
-     bash /path/to/ATACseq2tracks/atacseq2tracks.sh \
-          --config /home/USER/myproject/config/config.conf
-
-Multiple users on the same server
-──────────────────────────────────
-Each user keeps their own config.conf + samplesheet.csv anywhere they like.
-The scripts/ directory is installed once and shared read-only.
-No user-specific paths exist in any script.
+Do not store project-specific paths or credentials in the shared repository.

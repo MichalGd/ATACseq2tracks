@@ -1,51 +1,27 @@
-#!/bin/bash
-# ATACseq2tracks v3.0.4 — Merge biological replicates, generate merged tracks (tech-rep aware)
-# Usage: bash scripts/merge_replicates.sh
+#!/usr/bin/env bash
+# ATACseq2tracks v3.2.0 - merge filtered biological samples for group-level RPM tracks
 set -euo pipefail
-_load_config() {
-  if [[ -n "${F2T_CONFIG:-}" && -f "${F2T_CONFIG}" ]]; then
-    source "${F2T_CONFIG}"
-  else
-    local _d; _d="$(cd "$(dirname "${BASH_SOURCE[1]}")" && pwd)"
-    local _c="${_d}/../config/config.conf"
-    [[ -f "$_c" ]] && source "$_c" || {
-      echo "ERROR: config.sh not found. Export F2T_CONFIG or pass --config to atacseq2tracks.sh." >&2
-      exit 1
-    }
-  fi
-}
-_load_config
-
-SAMPLESHEET="$1"; IN_DIR="$2"; OUT_DIR="$3"; GENOME="${4:-hg38}"
-mkdir -p "$OUT_DIR"
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S"); LOG="${OUT_DIR}/merge_replicates_${TIMESTAMP}.log"
-log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG"; }
-declare -A group_bams
-declare -A seen_keys=()
-while IFS=',' read -r sid fq1 fq2 layout genome assay factor condition treatment cell_type rep tech_rep is_ctr ctrl_id rest; do
-  [[ "$sid" == "sample_id" ]] && continue
-  sid="${sid//\"/}"; genome="${genome//\"/}"; factor="${factor//\"/}"
-  condition="${condition//\"/}"; treatment="${treatment//\"/}"
-  cell_type="${cell_type//\"/}"; is_ctr="${is_ctr//\"/}"; rep="${rep//\"/}"
-  [[ "${is_ctr,,}" == "true" || "$is_ctr" == "1" ]] && continue
-  [[ "$genome" != "$GENOME" ]] && continue
-  KEY="${sid}_bioR${rep}"
-  [[ -n "${seen_keys[$KEY]+x}" ]] && continue
-  seen_keys["$KEY"]=1
-  BAM="${IN_DIR}/${KEY}_dedup_blFilt.bam"
-  [[ ! -f "$BAM" ]] && BAM="${IN_DIR}/${KEY}_dedup.bam"
-  [[ ! -f "$BAM" ]] && { log "WARN: BAM not found for $KEY"; continue; }
-  GRP="${factor}__${condition}__${treatment}__${cell_type}"
-  group_bams["$GRP"]+="$BAM "
+[[ -n "${F2T_CONFIG:-}" && -f "$F2T_CONFIG" ]] || { echo "ERROR: F2T_CONFIG is not set" >&2; exit 1; }
+# shellcheck disable=SC1090
+source "$F2T_CONFIG"
+SAMPLESHEET="${1:?samplesheet required}"; IN_DIR="${2:?filtered BAM directory required}"; OUT_DIR="${3:?output directory required}"; GENOME="${4:?genome required}"
+LOG="${OUT_DIR}/merge_replicates.log"; mkdir -p "$OUT_DIR"
+log() { printf '[%s] %s\n' "$(date '+%F %T')" "$1" | tee -a "$LOG"; }
+declare -A group_bams=() seen=()
+while IFS=',' read -r sid fq1 fq2 layout genome assay factor condition treatment cell_type rep tech_rep is_ctrl rest; do
+    [[ "$sid" == "sample_id" ]] && continue
+    for name in sid genome factor condition treatment cell_type rep is_ctrl; do value="${!name}"; printf -v "$name" '%s' "${value//\"/}"; done
+    [[ "$genome" != "$GENOME" || "${is_ctrl,,}" =~ ^(true|1|yes)$ ]] && continue
+    key="${sid}_bioR${rep}"; [[ -n "${seen[$key]+x}" ]] && continue; seen["$key"]=1
+    bam="${IN_DIR}/${key}_dedup_blFilt.bam"; [[ -s "$bam" ]] || { log "ERROR: filtered BAM missing: $bam"; exit 1; }
+    group="${factor}__${condition}__${treatment}__${cell_type}"; group_bams["$group"]+="$bam "
 done < "$SAMPLESHEET"
-for KEY in "${!group_bams[@]}"; do
-  BAMS=(${group_bams[$KEY]})
-  [[ ${#BAMS[@]} -lt 2 ]] && { log "SKIP $KEY — only 1 sample"; continue; }
-  MERGED_NAME="${KEY//__/_}_merged"; MERGED_BAM="${OUT_DIR}/${MERGED_NAME}.bam"
-  log "Merging ${#BAMS[@]} BAMs -> $MERGED_BAM"
-  samtools merge -@ "${THREADS_SAMTOOLS}" -f "$MERGED_BAM" "${BAMS[@]}"
-  samtools index -@ "${THREADS_SAMTOOLS}" "$MERGED_BAM"
-  bash "$(dirname "$0")/genomecoverage_single.sh" "$MERGED_BAM" "$GENOME" "$OUT_DIR" >> "$LOG" 2>&1
-  log "Merged coverage done: $MERGED_NAME"
+for group in "${!group_bams[@]}"; do
+    read -r -a bams <<< "${group_bams[$group]}"
+    (( ${#bams[@]} >= 2 )) || { log "SKIP group with one biological sample: $group"; continue; }
+    merged_name="${group//__/_}_merged"; merged_bam="${OUT_DIR}/${merged_name}.bam"
+    samtools merge -@ "${THREADS_SAMTOOLS:-2}" -f "$merged_bam" "${bams[@]}"
+    samtools index -@ "${THREADS_SAMTOOLS:-2}" "$merged_bam"
+    bash "$(dirname "$0")/genomecoverage_single.sh" "$merged_bam" "$GENOME" "$OUT_DIR" >> "$LOG" 2>&1
 done
-log "=== Replicate merging complete ==="
+log "Group merge and RPM track generation complete"

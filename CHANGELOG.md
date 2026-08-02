@@ -1,8 +1,39 @@
 # Changelog
 
+## v3.2.0 — 2026-08-02 (release candidate)
+
+### Scientific and output changes
+
+- Generate filtered-BAM CPM/RPM bigWigs by default for UCSC and IGV.
+- Define the consensus peak set using a configurable minimum number of distinct biological samples; default two.
+- Estimate DESeq2 size factors from consensus-peak counts and generate separate DESeq2-consensus-scaled bigWigs without an additional RPM divisor.
+- Use paired-end fragments (`BAMPE`) for paired-end MACS3 and explicit ATAC shift/extension parameters for single-end data.
+- Add default `ataqv` ENCODE-style TSS enrichment, compressed JSON metrics and an optional interactive viewer.
+- Add full-scan paired-end nucleosome-periodicity metrics plus 300-dpi PNG and vector PDF plots.
+- Retain DiffBind differential accessibility analysis and keep raw integer counts separate from visualization tracks.
+- Preserve biological replicates in DiffBind preparation using `sample_id + replicate` keys and force the DESeq2 analysis method explicitly.
+- Add optional HOMER peak annotation and motif enrichment hooks, disabled by default.
+
+### Reliability and consistency
+
+- Propagate failed child jobs instead of reporting silent stage success.
+- Distinguish raw and trimmed FastQC inputs.
+- Add MAPQ/SAM-flag, mitochondrial, blacklist and pair-safe BAM filtering with attrition metrics.
+- Reject mixed-genome runs and empty peak results by default.
+- Replace empty checkpoints with signatures covering the samplesheet, configuration and workflow version.
+- Centralize the runtime version in `VERSION`.
+- Remove ChIPQC from the environment and preflight requirements; require DESeq2 explicitly.
+- Disable automatic cleanup by default and document the retained/deleted file policy.
+
+### Upgrade notes
+
+Review `docs/update_3.2.0/APPLY_UPDATE.md` and merge site-specific paths into the new configuration template. Remove the Step 10 checkpoint before regenerating QC for an existing run.
+
 ---
 
-## v3.1.0 — 2026-06-05 (current)
+---
+
+## v3.1.0 — 2026-06-05 (previous)
 
 ### Breaking changes
 - **`chipqc_annotation` samplesheet column removed.** Column 17 (`chipqc_annotation`) no longer

@@ -47,8 +47,8 @@ dba <- dba.normalize(dba)
 # Set contrasts (by condition, treatment, or manually)
 dba <- dba.contrast(dba, categories = DBA_CONDITION, minMembers = 2)
 
-# Run differential analysis (DESeq2 by default)
-dba <- dba.analyze(dba)
+# Run differential analysis explicitly with DESeq2
+dba <- dba.analyze(dba, method = DBA_DESEQ2)
 
 # Extract results
 res <- dba.report(dba, th = 0.05)

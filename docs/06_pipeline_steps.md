@@ -62,7 +62,7 @@ Same as step 1 but on trimmed FASTQs.
 
 ## Step 4 — Alignment
 
-**Script:** `scripts/bowtie2_batch.sh` (dispatches `bowtie2_align.sh`)
+**Script:** `scripts/bowtie2_batch.sh`
 
 Aligns trimmed reads to the reference genome specified per sample in the samplesheet.
 
@@ -76,7 +76,7 @@ Aligns trimmed reads to the reference genome specified per sample in the samples
 
 ## Step 5 — Deduplication
 
-**Script:** `scripts/picard_dedup_batch.sh` (dispatches `picard_dedup.sh`)
+**Script:** `scripts/picard_dedup_batch.sh`
 
 Marks and removes PCR duplicates using Picard MarkDuplicates.
 
@@ -137,12 +137,12 @@ Groups biological replicates by `factor__condition__treatment__cell_type__genome
 
 **Script:** `scripts/macs2_batch.sh` (dispatches `macs2_peaks.sh`)
 
-Calls peaks for all IP samples using MACS2. Runs in two modes:
+Calls peaks for all non-control samples using MACS3. Paired-end libraries use fragment-aware `BAMPE`; single-end ATAC libraries use the configured shift and extension.
 
 **Per-replicate:** one peak set per IP sample
 **Pooled:** one peak set per condition group (merged BAMs)
 
-Both always produce **narrow** (`narrowPeak`) **and broad** (`broadPeak`) output, regardless of `macs2_mode`.
+The samplesheet `macs2_mode` selects narrow, broad, both, or none. The legacy column and script names are retained for compatibility, but the executable is consistently `macs3`.
 
 - Control BAM is resolved via `control_id` → samplesheet replicate lookup
 - Output: `peaks/per_replicate/<sample_id>/narrow/` and `.../broad/`
@@ -152,7 +152,7 @@ Both always produce **narrow** (`narrowPeak`) **and broad** (`broadPeak`) output
 
 ## Step 10 — Post-alignment QC (deepTools)
 
-**Scripts:** `scripts/post_alignment_qc_batch.sh` + `scripts/plot_chrom_coverage.py`
+**Scripts:** `scripts/post_alignment_qc_batch.sh`, `scripts/plot_chrom_coverage.py`, and `scripts/ataqv_qc_batch.sh`
 
 Runs a comprehensive post-alignment quality control module based on deepTools and standard
 command-line tools. This replaces the legacy ChIPQC module.
@@ -178,12 +178,18 @@ The module runs in four sequential phases:
 - `plotPCA` — genome-wide PCA
 
 **Phase 4 — Consensus peaks and peak-centric QC**
-- Reproducible peak consensus derived from narrow peaks supported by at least two replicates when possible
+- Consensus peaks derived from the selected peak type and supported by at least `CONSENSUS_MIN_SAMPLES` distinct biological sample keys (default two; no silent one-sample fallback)
 - `multiBamSummary BED-file` over consensus peaks + `plotCorrelation` + `plotPCA`
 - `computeMatrix reference-point` + `plotHeatmap` + `plotProfile` over consensus peaks
 - DESeq2 size factor estimation from consensus peak counts
-- Peak-normalised bigwig generation using consensus-block scaling
+- DESeq2-consensus-scaled bigWig generation using inverse size factors, without an additional RPM divisor
 - FRiP over consensus peak set for all samples
+
+**ATAC-specific QC**
+- ENCODE-style TSS enrichment and short-to-mononucleosomal ratio from `ataqv`
+- Compressed ataqv JSON and optional local viewer
+- Paired-end fragment-size bins, nucleosome-periodicity metrics, and PNG/PDF plots
+- Explicit not-applicable status for single-end fragment periodicity
 
 > **Zero-peak safety:** samples with zero peaks are retained in all summary tables and
 > flagged `NO_PEAKS`. They are skipped only for peak-centric steps, not for fingerprint,
@@ -222,9 +228,9 @@ Runs differential accessibility analysis on the prepared DiffBind samplesheets.
 
 - Reads the prefabricated DiffBind CSVs from `diffbind/`
 - Counts reads over peaks using `DiffBind::dba.count()`
-- Normalises using DiffBind defaults
+- Normalises peak counts through DiffBind and explicitly uses the DESeq2 analysis method
 - Builds contrasts by `Condition`
-- Runs `DiffBind::dba.analyze()` and exports results
+- Runs `DiffBind::dba.analyze(method = DBA_DESEQ2)` and exports DESeq2 results
 - Generates PCA, heatmap, MA plot, and volcano plot
 - Output: `diffbind_results/<sample_sheet>/`
 

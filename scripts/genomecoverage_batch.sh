@@ -1,52 +1,28 @@
-#!/bin/bash
-# ATACseq2tracks v3.0.4 — Genome coverage batch (tech-replicate aware)
-# Usage: bash scripts/genomecoverage_batch.sh
+#!/usr/bin/env bash
+# ATACseq2tracks v3.2.0 - strict RPM bigWig batch
 set -euo pipefail
-_load_config() {
-  if [[ -n "${F2T_CONFIG:-}" && -f "${F2T_CONFIG}" ]]; then
-    source "${F2T_CONFIG}"
-  else
-    local _d; _d="$(cd "$(dirname "${BASH_SOURCE[1]}")" && pwd)"
-    local _c="${_d}/../config/config.conf"
-    [[ -f "$_c" ]] && source "$_c" || {
-      echo "ERROR: config.sh not found. Export F2T_CONFIG or pass --config to atacseq2tracks.sh." >&2
-      exit 1
-    }
-  fi
+[[ -n "${F2T_CONFIG:-}" && -f "$F2T_CONFIG" ]] || { echo "ERROR: F2T_CONFIG is not set" >&2; exit 1; }
+# shellcheck disable=SC1090
+source "$F2T_CONFIG"
+SAMPLESHEET="${1:?samplesheet required}"; BAM_DIR="${2:?filtered BAM directory required}"; OUT_DIR="${3:?output directory required}"
+MAX_JOBS="${THREADS_PARALLEL_JOBS:-2}"; LOG="${OUT_DIR}/genomecoverage_batch.log"; mkdir -p "$OUT_DIR"
+log() { printf '[%s] %s\n' "$(date '+%F %T')" "$1" | tee -a "$LOG"; }
+declare -a pids=() labels=(); declare -A seen_keys=(); failures=0
+wait_one() {
+    local pid="${pids[0]}" label="${labels[0]}"
+    if ! wait "$pid"; then log "ERROR: RPM bigWig failed: $label"; failures=$((failures + 1)); fi
+    pids=("${pids[@]:1}"); labels=("${labels[@]:1}")
 }
-_load_config
-
-SAMPLESHEET="$1"; BAM_DIR="$2"; OUT_DIR="$3"
-MAX_JOBS="${THREADS_PARALLEL_JOBS}"
-mkdir -p "$OUT_DIR"
-LOG="${OUT_DIR}/genomecoverage_batch_$(date +%Y%m%d_%H%M%S).log"
-log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG"; }
-declare -a pids=()
-declare -A seen_keys=()
-wait_slot() {
-  while [[ ${#pids[@]} -ge $MAX_JOBS ]]; do
-    local new=(); for p in "${pids[@]}"; do kill -0 "$p" 2>/dev/null && new+=("$p"); done
-    pids=("${new[@]+"${new[@]}"}"); sleep 2
-  done
-}
-log "=== Genome coverage batch (tech-rep aware) ==="
-tail -n +2 "$SAMPLESHEET" | while IFS=',' read -r sample_id fastq_1 fastq_2 layout genome assay factor condition treatment cell_type replicate tech_rep is_control rest; do
-  sample_id="${sample_id//\"/}"; genome="${genome//\"/}"
-  replicate="${replicate//\"/}"
-  KEY="${sample_id}_bioR${replicate}"
-  [[ -n "${seen_keys[$KEY]+x}" ]] && continue
-  seen_keys["$KEY"]=1
-  BAM="${BAM_DIR}/${KEY}_dedup_blFilt.bam"
-  [[ ! -f "$BAM" ]] && BAM="${BAM_DIR}/${KEY}_dedup.bam"
-  [[ ! -f "$BAM" ]] && { log "SKIP $KEY — BAM not found"; continue; }
-  [[ -f "${OUT_DIR}/${KEY}_dedup_blFilt_Snorm.bw" ]] && { log "SKIP $KEY (bw exists)"; continue; }
-  wait_slot
-  (bash "$(dirname "$0")/genomecoverage_single.sh" "$BAM" "$genome" "$OUT_DIR" >> "$LOG" 2>&1) &
-  pids+=($!); log "STARTED: $KEY"
-done
-FAIL=0
-for p in "${pids[@]+"${pids[@]}"}"; do
-    wait "$p" || { log "ERROR: coverage job failed (pid $p)"; FAIL=1; }
-done
-[[ $FAIL -eq 1 ]] && { log "FATAL: one or more coverage jobs failed"; exit 1; }
-log "=== Coverage batch complete ==="
+while IFS=',' read -r sample_id fq1 fq2 layout genome assay factor condition treatment cell_type replicate tech_rep is_control rest; do
+    [[ "$sample_id" == "sample_id" ]] && continue
+    sample_id="${sample_id//\"/}"; genome="${genome//\"/}"; replicate="${replicate//\"/}"
+    key="${sample_id}_bioR${replicate}"; [[ -n "${seen_keys[$key]+x}" ]] && continue; seen_keys["$key"]=1
+    bam="${BAM_DIR}/${key}_dedup_blFilt.bam"; [[ -s "$bam" ]] || { log "ERROR: filtered BAM not found: $bam"; exit 1; }
+    [[ -s "${OUT_DIR}/${key}_dedup_blFilt_RPM.bw" ]] && { log "SKIP: $key"; continue; }
+    while (( ${#pids[@]} >= MAX_JOBS )); do wait_one; done
+    bash "$(dirname "$0")/genomecoverage_single.sh" "$bam" "$genome" "$OUT_DIR" >> "$LOG" 2>&1 &
+    pids+=("$!"); labels+=("$key")
+done < "$SAMPLESHEET"
+while (( ${#pids[@]} > 0 )); do wait_one; done
+(( failures == 0 )) || { log "FATAL: ${failures} RPM bigWig job(s) failed"; exit 1; }
+log "RPM bigWig batch complete"

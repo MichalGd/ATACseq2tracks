@@ -16,12 +16,12 @@ dependencies:
   - ucsc-bedgraphtobigwig
 
   # ── Peak calling ──────────────────────────────────────────────────────────
-  # Note: package is named macs3 in conda but invoked as "macs2" in the pipeline
-  # macs3>=3.0 is backward-compatible with macs2 CLI flags used in macs2_peaks.sh
+  # MACS3 is invoked with the macs3 executable; legacy script names are retained.
   - macs3>=3.0
 
   # ── QC & reporting ───────────────────────────────────────────────────────
   - multiqc>=1.18
+  - ataqv>=1.3
 
   # ── deepTools — NEW: required for Step 10 post_alignment_qc_batch.sh ─────
   - deeptools>=3.5
@@ -34,9 +34,9 @@ dependencies:
   # ── R base ───────────────────────────────────────────────────────────────
   - r-base>=4.3
 
-  # ── Bioconductor — kept for DiffBind (optional downstream use) ───────────
-  # ChIPQC is kept for backward compatibility but no longer used in Step 10
-  - bioconductor-chipqc
+  # ── Bioconductor ─────────────────────────────────────────────────────────
+  # DESeq2 is required for consensus-peak scaling. ChIPQC is no longer used.
+  - bioconductor-deseq2
   - bioconductor-diffbind
   - bioconductor-biocparallel
   - bioconductor-genomicalignments
