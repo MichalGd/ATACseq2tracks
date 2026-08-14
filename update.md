@@ -1,0 +1,149 @@
+# ATACseq2tracks snapshot 3.2.0 update
+
+**Snapshot:** ATACseq2tracks 3.2.0 release candidate  
+**Update date:** 2026-08-13  
+**Scope:** Dual broad- and narrow-peak DESeq2ATAC differential-accessibility analysis
+
+The public workflow version remains **3.2.0**. This update extends the prepared
+3.2.0 snapshot and does not create version 3.2.1.
+
+## Implemented changes
+
+- DESeq2ATAC now runs two independent analyses:
+  - a MACS3 broadPeak-based analysis;
+  - a MACS3 narrowPeak-based analysis.
+- Each analysis independently constructs its consensus regions, counts fragments
+  or reads, estimates DESeq2 size factors, fits the statistical model and writes
+  results and diagnostic figures.
+- Outputs are separated under:
+  - `deseq2atac/broad/`;
+  - `deseq2atac/narrow/`.
+- `deseq2atac/deseq2atac_peak_type_summary.tsv` compares the number of consensus
+  regions, nonzero tested regions and significant regions between both analyses.
+- Preflight requires `macs2_mode=both` for every non-control biological sample
+  when `RUN_DESEQ2ATAC=true`.
+- The final differential-accessibility report includes separate broad- and
+  narrow-consensus DESeq2ATAC entries.
+- Existing workflow architecture, upstream processing, track generation,
+  normalization, QC and dependencies remain unchanged.
+
+## Consensus-peak construction
+
+The following procedure is performed separately for broad and narrow peaks:
+
+1. Technical rows are collapsed to distinct biological sample keys defined by
+   `sample_id + replicate`.
+2. The corresponding per-replicate MACS3 peak file is imported for every
+   non-control biological sample. Pooled peak calls are not used.
+3. Peaks are restricted to canonical autosomes and X/Y, chromosome naming is
+   harmonized, blacklist-overlapping peaks are removed, and overlapping peaks
+   within each sample are reduced.
+4. All sample peak sets are disjoined into non-overlapping atomic segments.
+5. Each segment receives a support count equal to the number of distinct
+   biological samples whose peak set overlaps it.
+6. Segments supported by at least `DESEQ2ATAC_MIN_SAMPLES` samples are retained;
+   the default threshold is two.
+7. Adjacent or overlapping retained segments are reduced into the final sorted,
+   non-overlapping consensus regions.
+
+This is a **support-filtered consensus**, not a simple union. A region detected
+in only one sample is excluded by default. A condition-specific region remains
+eligible when it is supported by at least two samples from that condition; it
+does not need to be detected in both conditions.
+
+Broad consensus regions can be long and variable in width. Narrow consensus
+regions are more focal but retain narrowPeak-derived boundaries. They are not
+recentered to a fixed summit window.
+
+## Comparison with DiffBind
+
+The workflow runs DiffBind separately on broad and narrow inputs. DiffBind uses
+its default `minOverlap=2` consensus support and the configured
+`DIFFBIND_SUMMITS=100`, which recenters retained sites around consensus summits
+to approximately 201-bp windows.
+
+DESeq2ATAC does not perform summit recentering. Therefore, DESeq2ATAC narrow and
+DiffBind narrow do not test identical intervals. Differences between their
+results reflect both region construction and downstream analysis, rather than
+only a comparison of statistical packages.
+
+### Clarification of `DIFFBIND_SUMMITS`
+
+The current workflow deliberately sets `DIFFBIND_SUMMITS=100`; this is not an
+accidental implementation error. DiffBind interprets `summits` as the number of
+bases retained on each side of the consensus summit, so:
+
+- `DIFFBIND_SUMMITS=100` produces 201-bp windows;
+- `DIFFBIND_SUMMITS=200` produces 401-bp windows.
+
+The parameter is configurable, but the current workflow default of 100 overrides
+the upstream DiffBind package default of 200. A 100-bp half-width provides a more
+focal ATAC-seq window, whereas 200 includes more flanking signal and may increase
+counts while potentially diluting focal accessibility changes or combining nearby
+sites. If the intended workflow policy is to follow the official DiffBind default
+and restore the preceding 401-bp behavior, the configuration, script fallbacks,
+tests and documentation should all be changed consistently to
+`DIFFBIND_SUMMITS=200`. This snapshot does not make that change.
+
+Reference: [DiffBind package manual](https://bioconductor.org/packages/release/bioc/manuals/DiffBind/man/DiffBind.pdf).
+
+## Output layout
+
+```text
+deseq2atac/
+|-- deseq2atac_peak_type_summary.tsv
+|-- broad/
+|   |-- deseq2atac_consensus_peaks.bed
+|   |-- deseq2atac_consensus_peaks_with_support.tsv.gz
+|   |-- deseq2atac_raw_counts.tsv.gz
+|   |-- deseq2atac_normalized_counts.tsv.gz
+|   |-- deseq2atac_results_all.tsv.gz
+|   |-- deseq2atac_results_significant.tsv.gz
+|   |-- deseq2atac_summary.txt
+|   `-- plots/
+`-- narrow/
+    |-- deseq2atac_consensus_peaks.bed
+    |-- deseq2atac_consensus_peaks_with_support.tsv.gz
+    |-- deseq2atac_raw_counts.tsv.gz
+    |-- deseq2atac_normalized_counts.tsv.gz
+    |-- deseq2atac_results_all.tsv.gz
+    |-- deseq2atac_results_significant.tsv.gz
+    |-- deseq2atac_summary.txt
+    `-- plots/
+```
+
+Both peak-type directories also contain sample and library metadata, DESeq2 size
+factors, the serialized analysis object, session information and PNG/PDF
+diagnostics.
+
+## Validation completed
+
+- Bash syntax checks passed for all workflow and test scripts.
+- Focused dual-analysis regression checks passed.
+- Mocked broad and narrow wrapper execution passed.
+- `scripts/deseq2atac_analysis.R` passed R syntax parsing.
+- Modified files use LF line endings and contain no UTF-8 BOM.
+- `atacseq2tracks.sh` and `fastq2tracks.sh` remain identical.
+- `config/config.conf` and `config/config_temp.conf.template` remain identical.
+
+The complete Bioconductor execution self-test and representative BAM analysis
+must still be run in the server Conda environment:
+
+```bash
+conda activate ATACseq2tracks
+cd /home/micgdu/Analysis/workflows/ATACseq2tracks
+
+bash tests/check_bash_syntax.sh
+Rscript scripts/deseq2atac_analysis.R --self-test
+```
+
+For an existing analysis, remove only the affected checkpoints before resuming:
+
+```bash
+rm -f /path/from_OUTPUT_DIR/.checkpoints/step12a.done \
+      /path/from_OUTPUT_DIR/.checkpoints/step14.done
+```
+
+Legacy root-level DESeq2ATAC result files are not deleted or reused. New results
+are written only to the `broad/` and `narrow/` subdirectories, and the wrapper
+prints a warning if the preceding single-analysis layout is detected.

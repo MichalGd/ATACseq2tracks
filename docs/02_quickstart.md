@@ -19,7 +19,8 @@ conda activate ATACseq2tracks
 chmod +x atacseq2tracks.sh scripts/*.sh scripts/*.py scripts/*.R
 ```
 
-> **R packages** (DiffBind only) must be installed separately — see [Installation](03_installation.md#r-packages).
+> **R/Bioconductor packages** for DiffBind, DESeq2ATAC and consensus-track
+> normalization must be installed; see [Installation](03_installation.md#r-packages).
 
 ---
 
@@ -101,6 +102,8 @@ tail -f /path/to/my_project/run.log
 | Peaks (narrow + broad) | `analysis/peaks/per_replicate/` |
 | Post-alignment QC | `analysis/qc_post_alignment/` |
 | DiffBind samplesheets | `analysis/diffbind/` |
+| DiffBind results | `analysis/diffbind_results/` |
+| DESeq2ATAC broad/narrow analyses | `analysis/deseq2atac/{broad,narrow}/` |
 | HTML pipeline report | `analysis/reports/pipeline_report_<date>.html` |
 
 ---

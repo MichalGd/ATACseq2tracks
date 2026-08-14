@@ -29,6 +29,7 @@ individual_jobs/
 *.log
 *.pid
 *.tmp
+*.windows-artifact-backup.*
 nohup.out
 
 # R and report scratch files

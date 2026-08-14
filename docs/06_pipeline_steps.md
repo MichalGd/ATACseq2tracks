@@ -113,11 +113,12 @@ The filtered BAMs are the starting point for all downstream steps (7–11).
 
 Generates normalised coverage tracks from filtered BAMs.
 
-- bedGraph from `bedtools genomecov`
-- Library-size normalisation (RPKM)
-- Converted to bigwig with `bedGraphToBigWig`
-- Output: `bigwig/<sample_id>_bioR<N>_dedup_blFilt.bw`
-- bedGraphs retained in `bedGraph/` and `NormBedGraph/`
+- Paired-end signal is one properly paired fragment, selected through its first mate and extended across the insert
+- Single-end signal uses `SE_SIGNAL_MODE="read"`: one filtered alignment record per observation, without extension or an inferred fragment
+- Canonical autosomes plus X/Y only; mitochondrial and noncanonical contigs are excluded
+- deepTools CPM with exact scaling and the same fragment/read definition in its denominator
+- Output: `bigwig/<sample_id>_bioR<N>_dedup_blFilt_CPM.bw`
+- CPM bedGraphs are not generated
 
 ---
 
@@ -128,8 +129,8 @@ Generates normalised coverage tracks from filtered BAMs.
 Groups biological replicates by `factor__condition__treatment__cell_type__genome` and generates a merged bigwig track for each group.
 
 - Uses `samtools merge` on filtered BAMs from all replicates in a group
-- Generates a single normalised bigwig for the merged BAM
-- Output: `bigwig_merged/<group_key>.bw`
+- Generates a single CPM bigWig for the merged BAM with the same layout-aware signal definition
+- Output: `bigwig_merged/<group_key>_CPM.bw`
 
 ---
 
@@ -138,6 +139,8 @@ Groups biological replicates by `factor__condition__treatment__cell_type__genome
 **Script:** `scripts/macs2_batch.sh` (dispatches `macs2_peaks.sh`)
 
 Calls peaks for all non-control samples using MACS3. Paired-end libraries use fragment-aware `BAMPE`; single-end ATAC libraries use the configured shift and extension.
+
+The SE MACS3 shift/extension affects peak calling only. Normalization tracks and consensus counts remain read-based and do not use MACS3 pseudo-fragment extension.
 
 **Per-replicate:** one peak set per IP sample
 **Pooled:** one peak set per condition group (merged BAMs)
@@ -169,7 +172,7 @@ The module runs in four sequential phases:
 **Phase 2 — Chromosome-level karyogram**
 - Per-sample chromosome coverage barcode plots replicating the ChIPQC "ChIP Peaks over Chromosomes" panel
 - One row per chromosome in cytogenetic order; X-axis = chromosomal position in bp
-- Signal from `bamCoverage --binSize 100000 --normalizeUsing RPKM` (bedtools fallback available)
+- Signal from `bamCoverage --binSize 100000 --normalizeUsing RPKM` with the shared canonical and fragment/read semantics
 - Per-sample PNGs + multi-sample panel for direct comparison
 
 **Phase 3 — Genome-wide deepTools QC**
@@ -181,8 +184,12 @@ The module runs in four sequential phases:
 - Consensus peaks derived from the selected peak type and supported by at least `CONSENSUS_MIN_SAMPLES` distinct biological sample keys (default two; no silent one-sample fallback)
 - `multiBamSummary BED-file` over consensus peaks + `plotCorrelation` + `plotPCA`
 - `computeMatrix reference-point` + `plotHeatmap` + `plotProfile` over consensus peaks
+- Canonical-chromosome filtering of peak inputs before consensus construction
+- Fragment/read-aware consensus-peak counting using the same semantics as coverage tracks
 - DESeq2 size factor estimation from consensus peak counts
-- DESeq2-consensus-scaled bigWig generation using inverse size factors, without an additional RPM divisor
+- DESeq2-consensus bigWig/bedGraph generation using inverse size factors, without an additional CPM divisor
+- DESeq2 robust-CPM bigWig/bedGraph generation using `1e6 / (size_factor * geometric_mean(column_sums))`
+- Per-sample normalization metadata, including the CPM count, column sum, cohort constant and both scales
 - FRiP over consensus peak set for all samples
 
 **ATAC-specific QC**
@@ -227,12 +234,38 @@ See [Downstream: DiffBind](08_diffbind.md) for usage.
 Runs differential accessibility analysis on the prepared DiffBind samplesheets.
 
 - Reads the prefabricated DiffBind CSVs from `diffbind/`
-- Counts reads over peaks using `DiffBind::dba.count()`
+- Counts reads over peaks using `DiffBind::dba.count(summits=DIFFBIND_SUMMITS)`;
+  the ATAC default is a 100-bp half-width (approximately 201-bp windows)
 - Normalises peak counts through DiffBind and explicitly uses the DESeq2 analysis method
 - Builds contrasts by `Condition`
 - Runs `DiffBind::dba.analyze(method = DBA_DESEQ2)` and exports DESeq2 results
 - Generates PCA, heatmap, MA plot, and volcano plot
 - Output: `diffbind_results/<sample_sheet>/`
+
+### Peer Step 12a - DESeq2ATAC
+
+**Scripts:** `scripts/deseq2atac_analysis.sh`, `scripts/deseq2atac_analysis.R`
+
+Runs two independent raw-count DESeq2 analyses over replicate-supported MACS3
+peak regions: one broad-peak analysis and one narrow-peak analysis.
+
+- Requires both peak types for every biological sample (`macs2_mode=both`)
+- Constructs the broad and narrow consensuses independently
+- For each peak type, disjoins sample peaks into atomic segments, retains atoms
+  with support >=2 by default (`DESEQ2ATAC_MIN_SAMPLES`), then reduces retained
+  atoms to sorted non-overlapping regions
+- Applies the shared canonical chromosome and blacklist universe before support
+  is calculated
+- Counts each PE proper pair once or each SE alignment once
+- Uses raw integer counts and DESeq2 `poscounts` size factors
+- Supports an explicitly configured, full-rank block term
+- Exports compressed matrices/results and publication-quality PNG/PDF diagnostics
+- Treats zero FDR hits as a successful, explicitly documented result
+- Uses `.checkpoints/step12a.done`, independently of DiffBind Step 12
+- Output: `deseq2atac/broad/`, `deseq2atac/narrow/`, and a peak-type summary
+
+Both differential modules are attempted before a module failure is propagated,
+so a failed analysis cannot erase or prevent preservation of its peer's results.
 
 See [13 — Differential accessibility](13_differential_accessibility.md).
 

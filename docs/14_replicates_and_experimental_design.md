@@ -94,6 +94,9 @@ For differential accessibility analysis, encode batch structure explicitly in yo
 ## Notes for ATAC-seq experiments
 
 - Paired-end data is preferred because fragment-size distribution is a core QC metric.
-- Single-end data is supported, but it provides less information on nucleosome patterning.
+- Single-end data is supported through `SE_SIGNAL_MODE="read"`: one retained alignment is counted once and no physical fragment is inferred.
+- Keep PE and SE libraries in separate samplesheets, output directories and DESeq2 cohorts because their signal units differ.
+- SE MACS3 shift/extension is a peak-calling model and does not convert normalization signal into observed fragments.
+- Tn5 insertion-site tracks are not implemented in this update.
 - Use at least **2 biological replicates** for any comparison; **3 or more** is highly recommended.
 - Technical replicates increase depth and reproducibility but do not increase inferential power.

@@ -41,7 +41,14 @@ conda activate ATACseq2tracks
 
 ## R packages
 
-R and Bioconductor are required for DESeq2 consensus-peak size factors in Step 10 and for DiffBind in Steps 11–12. ChIPQC is not required.
+R/Bioconductor is also required by the independent DESeq2ATAC Step 12a.
+DESeq2ATAC uses `GenomicAlignments::summarizeOverlaps()` instead of the legacy
+HTSeq-count implementation, so HTSeq and name-sorted temporary BAMs are not
+required.
+
+R and Bioconductor are required for DESeq2 consensus-peak size factors in Step
+10, DiffBind in Steps 11–12, and DESeq2ATAC in Step 12a. ChIPQC and HTSeq are
+not required.
 
 ```r
 # Install Bioconductor manager if needed
@@ -53,6 +60,8 @@ BiocManager::install(c(
     "DiffBind",
     "BiocParallel",
     "GenomicAlignments",
+    "GenomicRanges",
+    "Rsamtools",
     "rtracklayer"
 ))
 

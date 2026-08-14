@@ -65,7 +65,9 @@ build_ss <- function(ptype) {
             bamControl = ifelse(is.na(ctrl_id) | nchar(ctrl_id) == 0, NA_character_,
                                 make_bam(ctrl_id, ctrl_rep, bam_dir)),
             Peaks      = make_peak(sid, rep, peaks_dir, ptype),
-            PeakCaller = ptype,
+            # DiffBind supports "narrow" for narrowPeak and "bed" for generic
+            # BED-like files. There is no "broad" peak-caller identifier.
+            PeakCaller = if (ptype == "broad") "bed" else "narrow",
             stringsAsFactors = FALSE
         )
     }))

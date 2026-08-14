@@ -1,5 +1,5 @@
 #!/usr/bin/env Rscript
-# ATACseq2tracks v3.2.0 - DESeq2 size factors from consensus-peak read counts
+# ATACseq2tracks v3.2.0 - DESeq2 size factors from consensus-peak fragment/read counts
 suppressPackageStartupMessages(library(DESeq2))
 
 args <- commandArgs(trailingOnly = TRUE)
@@ -52,12 +52,36 @@ dds <- estimateSizeFactors(dds, type = "poscounts")
 sf <- sizeFactors(dds)
 if (any(!is.finite(sf)) || any(sf <= 0)) stop("DESeq2 returned invalid size factors")
 
+# Match DESeq2::fpm(dds, robust=TRUE) exactly. The robust effective library
+# size is the DESeq2 size factor multiplied by the cohort geometric mean of
+# the raw count-matrix column sums.
+consensus_count_sum <- colSums(counts(dds))
+if (any(!is.finite(consensus_count_sum)) || any(consensus_count_sum <= 0)) {
+  stop("Every sample must have a positive consensus-peak count sum")
+}
+cohort_geometric_mean_column_sum <- exp(mean(log(consensus_count_sum)))
+robust_effective_library_size <- sf * cohort_geometric_mean_column_sum
+robust_cpm_scale <- 1e6 / robust_effective_library_size
+
+# Guard the exported genome-wide scale against drift from DESeq2's definition.
+robust_fpm <- fpm(dds, robust = TRUE)
+expected_robust_fpm <- sweep(as.matrix(counts(dds)), 2, robust_cpm_scale, "*")
+if (!isTRUE(all.equal(unname(robust_fpm), unname(expected_robust_fpm),
+                      tolerance = 1e-10, check.attributes = FALSE))) {
+  stop("Internal robust CPM scale does not reproduce DESeq2::fpm(robust=TRUE)")
+}
+
 sf_table <- data.frame(
   sample_id = meta$sample_id,
   key = meta$key,
   genome = meta$genome,
   size_factor = as.numeric(sf),
   track_scale_factor = as.numeric(1 / sf),
+  deseq2_consensus_scale = as.numeric(1 / sf),
+  consensus_count_sum = as.numeric(consensus_count_sum),
+  cohort_geometric_mean_column_sum = rep(cohort_geometric_mean_column_sum, length(sf)),
+  robust_effective_library_size = as.numeric(robust_effective_library_size),
+  deseq2_robust_cpm_scale = as.numeric(robust_cpm_scale),
   basis = "DESeq2_poscounts_on_consensus_peaks",
   stringsAsFactors = FALSE
 )
@@ -65,4 +89,5 @@ write.table(sf_table, file.path(table_dir, "consensus_sizeFactors.tsv"), sep = "
 write.table(cbind(region = rownames(count_df), count_df), raw_out, sep = "\t", row.names = FALSE, quote = FALSE)
 write.table(cbind(region = rownames(counts(dds, normalized = TRUE)), counts(dds, normalized = TRUE)),
             normalized_out, sep = "\t", row.names = FALSE, quote = FALSE)
-message("DESeq2 consensus size factors written for ", ncol(count_df), " samples and ", nrow(count_df), " peaks")
+message("DESeq2 consensus and robust CPM scales written for ", ncol(count_df),
+        " samples and ", nrow(count_df), " peaks")

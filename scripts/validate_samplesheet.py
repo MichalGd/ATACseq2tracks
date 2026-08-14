@@ -86,6 +86,7 @@ def main():
     control_ids_declared = set()
     ip_to_control        = {}
     group_meta           = {}
+    run_layouts          = set()
 
     # File-check columns: always check fastq_1, fastq_2, blacklist
     # chipqc_annotation is intentionally excluded even in 18-col sheets —
@@ -118,6 +119,8 @@ def main():
         layout = row["layout"].strip().upper()
         if layout not in VALID_LAYOUTS:
             errors += err(i, f"Invalid layout '{layout}' (PE or SE)")
+        else:
+            run_layouts.add(layout)
         if not row["fastq_1"].strip():
             errors += err(i, "fastq_1 is empty")
         if layout == "PE" and not row["fastq_2"].strip():
@@ -181,6 +184,10 @@ def main():
         if ctrl not in unique_sids:
             errors += err("?", f"Sample '{sid}' references control_id '{ctrl}' "
                                f"not found in samplesheet")
+
+    if len(run_layouts) > 1:
+        errors += err("?", "Mixed PE/SE runs are not supported: use separate "
+                           "samplesheets, output directories and normalization cohorts")
 
     n_ip  = sum(1 for r in rows if r["is_control"].strip().lower() not in ("true","1","yes"))
     n_grp = len(group_meta)

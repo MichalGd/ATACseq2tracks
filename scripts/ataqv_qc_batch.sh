@@ -61,6 +61,7 @@ fi
 AUTOSOMES="${REFERENCE_DIR}/${GENOME}.autosomal_references.txt"
 FIRST_BAM="$(find "$BAM_DIR" -maxdepth 1 -name '*_dedup_blFilt.bam' -print -quit)"
 [[ -n "$FIRST_BAM" ]] || { echo "ERROR: no filtered BAM found in $BAM_DIR" >&2; exit 1; }
+[[ -f "${FIRST_BAM}.bai" ]] || samtools index -@ "${THREADS_ATAQV:-8}" "$FIRST_BAM"
 samtools idxstats "$FIRST_BAM" | awk -v maximum="$AUTOSOME_MAX" '
     $1 != "*" { original=$1; name=$1; sub(/^chr/, "", name); if (name ~ /^[0-9]+$/ && name+0 >= 1 && name+0 <= maximum) print original }
 ' > "$AUTOSOMES"

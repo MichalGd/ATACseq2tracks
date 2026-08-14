@@ -8,10 +8,12 @@ TRACK_FILE="${BIGWIG_DIR}/ucsc_tracks.txt"; : > "$TRACK_FILE"; count=0
 while IFS= read -r bw; do
     file="$(basename "$bw")"; name="${file%.bw}"; url="$file"
     [[ -n "$URL_BASE" ]] && url="${URL_BASE%/}/${file}"
-    if [[ "$name" == *_DESeq2Consensus ]]; then
+    if [[ "$name" == *_DESeq2RobustCPM ]]; then
+        description="${PREFIX} DESeq2 robust CPM"; color="120,50,160"
+    elif [[ "$name" == *_DESeq2Consensus ]]; then
         description="${PREFIX} DESeq2 consensus-peak normalized"; color="180,50,50"
-    elif [[ "$name" == *_RPM ]]; then
-        description="${PREFIX} reads per million"; color="40,90,180"
+    elif [[ "$name" == *_CPM ]]; then
+        description="${PREFIX} counts per million"; color="40,90,180"
     else
         description="${PREFIX} bigWig"; color="80,80,80"
     fi

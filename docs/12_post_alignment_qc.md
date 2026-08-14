@@ -79,9 +79,9 @@ Output: `qc_post_alignment/tables/qc_summary.tsv`
 Generates per-sample coverage plots showing signal distribution across all
 chromosomes — replicating the ChIPQC "ChIP Peaks over Chromosomes" panel style:
 
-- One row per chromosome (chr1–chr22, chrX, chrY, chrM) in cytogenetic order
+- One row per canonical nuclear chromosome (autosomes, chrX and chrY) in cytogenetic order
 - X-axis: chromosomal position in bp, shared scale across all chromosomes
-- Signal bars: 100 kb bin RPKM from `bamCoverage`
+- Signal bars: 100 kb bin RPKM from `bamCoverage`, using fragment-based PE or read-based SE signal
 - Grey background bar: chromosome length reference
 - Chromosome labels on the right margin
 
@@ -90,9 +90,10 @@ Two outputs are produced:
 - `karyogram_all_samples.png` — multi-panel grid with all IP samples together
 
 **Tools used:**
-- `deeptools bamCoverage --binSize 100000 --normalizeUsing RPKM` (primary)
-- `bedtools genomecov` over 100 kb tiled windows (fallback if bamCoverage fails)
+- `deeptools bamCoverage --binSize 100000 --normalizeUsing RPKM`
 - `matplotlib` / `pandas` for plotting
+
+A read-based bedtools fallback is deliberately not used, because it would violate the paired-end fragment signal definition.
 
 Output directory: `qc_post_alignment/plots/chromosome_coverage/`
 Per-chromosome table: `qc_post_alignment/tables/per_chromosome_reads.tsv`
@@ -190,7 +191,12 @@ Output: `qc_post_alignment/peak_sets/consensus_peaks.bed`
 Additional consensus outputs:
 - `qc_post_alignment/matrices/consensus_peak_counts.tsv` — raw consensus peak count matrix
 - `qc_post_alignment/matrices/consensus_peak_normCounts.tsv` — DESeq2 normalized consensus peak counts
-- `qc_post_alignment/tables/consensus_sizeFactors.tsv` — DESeq2 size factors from consensus peak counts
+- `qc_post_alignment/tables/consensus_sizeFactors.tsv` — DESeq2 size factors, consensus column sums, cohort geometric mean and robust CPM scales
+- `qc_post_alignment/tables/track_normalization_metadata.tsv` — per-sample fragment/read count used for CPM plus every applied track scale
+
+All peak inputs are first restricted to the same canonical autosome/X/Y universe used for tracks. Paired-end peak counts use one properly paired first-mate record per fragment and extend it across the insert; single-end counts remain read-based.
+
+Two DESeq2-derived track families are generated. `*_DESeq2Consensus` multiplies raw coverage by `1 / s_j`. `*_DESeq2RobustCPM` multiplies it by `1e6 / (s_j * G)`, where `G = exp(mean(log(colSums(K))))`. This matches `DESeq2::fpm(robust=TRUE)` on the consensus count matrix. Because `1e6/G` is common to the cohort, robust CPM is only a cohort-wide unit conversion of the consensus track, not an additional sample-specific normalization.
 
 #### Signal correlation and PCA over consensus peaks
 
@@ -253,6 +259,7 @@ qc_post_alignment/
 |   +-- qc_warnings.tsv              # Flagged samples with warning codes
 |   +-- frip_consensus.tsv           # FRiP over merged consensus peak set
 |   +-- consensus_sizeFactors.tsv    # DESeq2 consensus peak size factors
+|   +-- track_normalization_metadata.tsv # CPM counts and DESeq2 scales
 |   +-- per_chromosome_reads.tsv     # Read counts per chromosome per sample
 |   +-- fingerprint_metrics.tsv      # deepTools fingerprint raw values
 |

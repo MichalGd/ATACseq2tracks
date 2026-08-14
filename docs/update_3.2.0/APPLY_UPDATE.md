@@ -44,6 +44,12 @@ CONSENSUS_PEAK_TYPE="narrow"
 CONSENSUS_MIN_SAMPLES=2
 ALLOW_SINGLE_SAMPLE_CONSENSUS=false
 GENERATE_DESEQ2_CONSENSUS_TRACKS=true
+DIFFBIND_SUMMITS=100
+RUN_DESEQ2ATAC=true
+DESEQ2ATAC_MIN_SAMPLES=2
+DESEQ2ATAC_ALPHA=0.05
+DESEQ2ATAC_BLOCK_COLUMN=""
+DESEQ2ATAC_REFERENCE_CONDITION=""
 RUN_ATAQV_QC=true
 GENERATE_ATAQV_VIEWER=true
 RUN_PEAK_ANNOTATION=false
@@ -69,15 +75,33 @@ Use a small paired-end ATAC-seq dataset with at least two biological samples and
 - all expected filtered BAMs pass `samtools quickcheck`;
 - filtering attrition tables reconcile with alignment and deduplication counts;
 - PE MACS3 logs show `BAMPE` and requested peak files are non-empty;
-- every expected `_RPM.bw` and `_DESeq2Consensus.bw` is non-empty;
+- every expected `_CPM.bw` and `_DESeq2Consensus.bw` is non-empty;
 - `consensus_peaks.bed` applies the configured biological-sample support;
 - `consensus_sizeFactors.tsv` contains one positive finite factor per non-control sample;
 - each ATAC sample has a non-empty compressed `*.ataqv.json.gz` and TSS enrichment value;
 - each PE sample has periodicity PNG/PDF plots and quantitative metrics;
 - DiffBind produces the requested contrast results and diagnostic figures;
+- DiffBind summaries report the configured 100-bp summit half-width;
+- `deseq2atac/broad/` and `deseq2atac/narrow/` contain independently supported
+  consensuses, readable compressed count and result tables, explicit contrast
+  direction, and non-empty PNG/PDF figures;
+- PE and SE fixtures confirm one fragment and one read per observation,
+  respectively; do not combine both layouts in one run;
+- a no-hit DESeq2ATAC fixture completes successfully with a header-only
+  significant table and an explicit zero-significant summary;
 - `ucsc_tracks.txt` contains the intended relative or public locations;
 - a deliberately failed child job causes a non-zero stage exit;
 - resume checkpoints skip completed work and rerun when their signature changes.
+
+For an existing output directory, remove only `.checkpoints/step12.done` to
+rerun DiffBind and `.checkpoints/step12a.done` to rerun DESeq2ATAC. Step 12a is
+new and does not reuse the established Step 13/14 checkpoint names.
+
+The new settings have code defaults. When resuming an existing checkpointed run
+with those defaults, do not edit its project config merely to add the variables:
+the global run signature includes the entire config and a config edit makes all
+older checkpoints stale. Add settings to an existing config only when overriding
+a default is necessary.
 
 Compare tracks, peak counts, consensus counts and differential results with the previous workflow on a known dataset before using 3.2.0 for biological conclusions.
 

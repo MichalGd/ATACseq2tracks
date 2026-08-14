@@ -211,7 +211,8 @@ Pre-flight check (step 0) requires 50 GB free. For 30+ samples with PE reads, bu
 - [ ] `control_id` values match `sample_id` values **exactly** (case-sensitive)
 - [ ] `macs2_mode=none` for all `is_control=TRUE` rows
 - [ ] `tech_replicate` is `1` for samples with only one sequencing run
-- [ ] No trailing spaces or Windows line endings in the samplesheet (use `dos2unix` if in doubt)
+- [ ] Preflight reports both inputs as UTF-8/LF or creates a timestamped
+  `*.windows-artifact-backup.*` file and reports that it normalized them.
 - [ ] `THREADS_DEEPTOOLS` is set in `config.conf`
 - [ ] deepTools >= 3.5 is installed in the conda environment
 

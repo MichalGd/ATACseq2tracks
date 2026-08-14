@@ -78,9 +78,28 @@ CONSENSUS_MIN_SAMPLES=2
 ALLOW_SINGLE_SAMPLE_CONSENSUS=false
 GENERATE_DESEQ2_CONSENSUS_TRACKS=true
 
-# Browser tracks: RPM is generated first; DESeq2 consensus-peak scaling is
-# generated after the consensus count matrix and size factors are available.
+# Differential accessibility. DiffBind uses a 201-bp summit-centred window by
+# default; set DIFFBIND_SUMMITS=200 to reproduce the previous 401-bp behavior.
+DIFFBIND_SUMMITS=100
+
+# DESeq2ATAC runs independent broad- and narrow-peak analyses. Each peak type
+# gets its own replicate-supported consensus and DESeq2 model. It requires
+# macs2_mode=both for every non-control sample. The default model is ~ condition.
+# Set the optional block column only when it is present in the samplesheet and
+# not confounded with condition (for example, batch or donor).
+RUN_DESEQ2ATAC=true
+DESEQ2ATAC_MIN_SAMPLES=2
+DESEQ2ATAC_ALPHA=0.05
+DESEQ2ATAC_BLOCK_COLUMN=""
+DESEQ2ATAC_REFERENCE_CONDITION=""
+
+# Browser tracks: fragment/read CPM is generated first; DESeq2 consensus and
+# robust CPM bigWig/bedGraph tracks follow consensus size-factor estimation.
 TRACK_BIN_SIZE=10
+# SE libraries use one filtered alignment as one observation. A physical
+# fragment cannot be reconstructed from an SE read. Tn5 mode is not yet implemented.
+SE_SIGNAL_MODE="read"
+# Required for a shared canonical autosome/X/Y universe across all track types.
 TRACK_STANDARD_CHROMS_ONLY=true
 BAMCOVERAGE_COMMON_ARGS=""
 UCSC_BIGDATA_URL_BASE=""

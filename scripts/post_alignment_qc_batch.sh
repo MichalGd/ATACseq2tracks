@@ -45,6 +45,14 @@ OUT_DIR="${5:?OUT_DIR required}"
 THREADS="${THREADS_DEEPTOOLS:-8}"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+QC_HELPERS="${SCRIPT_DIR}/qc_table_helpers.sh"
+[[ -f "$QC_HELPERS" ]] || { echo "ERROR: missing QC helper: $QC_HELPERS" >&2; exit 1; }
+# shellcheck disable=SC1090
+source "$QC_HELPERS"
+TRACK_HELPERS="${SCRIPT_DIR}/track_normalization_helpers.sh"
+[[ -f "$TRACK_HELPERS" ]] || { echo "ERROR: missing track helper: $TRACK_HELPERS" >&2; exit 1; }
+# shellcheck disable=SC1090
+source "$TRACK_HELPERS"
 
 # ── Output directory structure ─────────────────────────────────────────────────
 QC_TABLES="${OUT_DIR}/tables"
@@ -55,8 +63,9 @@ QC_LOGS="${OUT_DIR}/logs"
 QC_PEAKS="${OUT_DIR}/peak_sets"
 QC_DT="${OUT_DIR}/deeptools"
 BIGWIG_PEAKNORM_DIR="$(dirname "$BIGWIG_DIR")/bigwig_deseq2_consensus"
+BIGWIG_ROBUST_DIR="$(dirname "$BIGWIG_DIR")/bigwig_deseq2_robust_cpm"
 mkdir -p "$QC_TABLES" "$QC_PLOTS" "$QC_CHRPLOTS" "$QC_MATRICES" \
-         "$QC_LOGS" "$QC_PEAKS" "$QC_DT" "$BIGWIG_PEAKNORM_DIR"
+         "$QC_LOGS" "$QC_PEAKS" "$QC_DT" "$BIGWIG_PEAKNORM_DIR" "$BIGWIG_ROBUST_DIR"
 
 MAIN_LOG="${QC_LOGS}/post_qc_${TIMESTAMP}.log"
 SUMMARY_TSV="${QC_TABLES}/qc_summary.tsv"
@@ -109,61 +118,86 @@ add_warning() {
     warn "$sid — $wtype: $msg"
 }
 
-generate_peaknorm_bigwig() {
-    local bam="$1" key="$2" size_factor="$3"
-    local genome="${SAMPLE_GENOME[$key]:-hg38}"
-    local outdir="$BIGWIG_PEAKNORM_DIR"
-    local sample=$(basename "$bam" .bam)
-    local std_bam="${outdir}/${sample}_stChr.bam"
-    local bw="${outdir}/${sample}_DESeq2Consensus.bw"
-    local chrom_sizes=""
-    local std_chr=""
+generate_deseq2_tracks() {
+    local bam="$1" key="$2" layout="$3" size_factor="$4" robust_scale="$5"
+    local consensus_count_sum="$6" cohort_geometric_mean="$7"
+    local genome="${SAMPLE_GENOME[$key]:-hg38}" sample tmp_dir std_bam
+    local signal_count signal_unit consensus_scale output format scale label
+    local consensus_bw consensus_bg robust_bw robust_bg
+    local consensus_bw_tmp consensus_bg_tmp robust_bw_tmp robust_bg_tmp
+    local -a std_chr=()
+    sample=$(basename "$bam" .bam)
 
-    if [[ "${genome,,}" == "hg38" ]]; then
-        chrom_sizes="$CHROM_SIZES_HUMAN"
-        std_chr="chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 chr11 chr12 chr13 chr14 chr15 chr16 chr17 chr18 chr19 chr20 chr21 chr22 chrX chrY"
-    elif [[ "${genome,,}" == "mm39" ]]; then
-        chrom_sizes="$CHROM_SIZES_MOUSE"
-        std_chr="chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 chr11 chr12 chr13 chr14 chr15 chr16 chr17 chr18 chr19 chrX chrY"
-    else
-        warn "Unknown genome for $key: $genome — skipping peak-normalised bigwig"
+    for value in "$size_factor" "$robust_scale" "$consensus_count_sum" "$cohort_geometric_mean"; do
+        awk -v value="$value" 'BEGIN {
+            valid = value ~ /^([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][-+]?[0-9]+)?$/ && value > 0
+            exit(valid ? 0 : 1)
+        }' || { warn "Invalid normalization value for $key: $value"; return 1; }
+    done
+    [[ -f "$bam" ]] || { warn "BAM not found for DESeq2 tracks: $bam"; return 1; }
+    [[ "${TRACK_STANDARD_CHROMS_ONLY:-true}" == "true" ]] || {
+        warn "TRACK_STANDARD_CHROMS_ONLY=false is incompatible with the unified canonical track universe"
+        return 1
+    }
+
+    layout="$(resolve_signal_layout "$bam" "$layout")" || return 1
+    signal_unit="$(signal_unit_for_layout "$layout")"
+    samtools index -@ "${THREADS_BIGWIG:-2}" "$bam" || { warn "BAM indexing failed for $key"; return 1; }
+    mapfile -t std_chr < <(canonical_contigs_from_bam "$bam" "$genome")
+    (( ${#std_chr[@]} > 0 )) || { warn "No canonical chromosomes found in $bam for $genome"; return 1; }
+
+    tmp_dir="$(mktemp -d "${BIGWIG_PEAKNORM_DIR}/.${sample}.tracks.XXXXXX")"
+    std_bam="${tmp_dir}/${sample}.canonical.bam"
+    if ! samtools view -@ "${THREADS_BIGWIG:-2}" -b -o "$std_bam" "$bam" "${std_chr[@]}"; then
+        warn "Canonical-chromosome BAM creation failed for $key"
+        rm -rf "$tmp_dir"
         return 1
     fi
-    if [[ -z "$chrom_sizes" || ! -f "$chrom_sizes" ]]; then
-        warn "Chromosome sizes file unavailable for $genome — cannot create peak-normalised bigwig for $key"
+    samtools index -@ "${THREADS_BIGWIG:-2}" "$std_bam" || {
+        warn "Canonical-chromosome BAM indexing failed for $key"
+        rm -rf "$tmp_dir"
         return 1
-    fi
-    if [[ -z "$size_factor" || "$size_factor" == "NA" || $(awk 'BEGIN{print ('$size_factor'<=0)}') -eq 1 ]]; then
-        warn "Invalid size factor for $key: $size_factor — skipping peak-normalised bigwig"
-        return 1
-    fi
-    if [[ ! -f "$bam" ]]; then
-        warn "BAM not found for peak-normalised bigwig: $bam"
+    }
+    signal_count="$(signal_count_for_bam "$std_bam" "$layout" 2>/dev/null || echo 0)"
+    if [[ "$signal_count" -le 0 ]]; then
+        warn "Zero $signal_unit records in canonical BAM for $key"
+        rm -rf "$tmp_dir"
         return 1
     fi
 
-    samtools index -@ "${THREADS_BIGWIG}" "$bam"
-    # shellcheck disable=SC2086
-    samtools view -@ "${THREADS_BIGWIG}" -b -o "$std_bam" "$bam" $std_chr
-    samtools index -@ "${THREADS_BIGWIG}" "$std_bam"
+    consensus_scale=$(awk "BEGIN {printf \"%.12g\", 1/$size_factor}")
+    consensus_bw="${BIGWIG_PEAKNORM_DIR}/${sample}_DESeq2Consensus.bw"
+    consensus_bg="${BIGWIG_PEAKNORM_DIR}/${sample}_DESeq2Consensus.bedGraph"
+    robust_bw="${BIGWIG_ROBUST_DIR}/${sample}_DESeq2RobustCPM.bw"
+    robust_bg="${BIGWIG_ROBUST_DIR}/${sample}_DESeq2RobustCPM.bedGraph"
+    consensus_bw_tmp="${tmp_dir}/$(basename "$consensus_bw")"
+    consensus_bg_tmp="${tmp_dir}/$(basename "$consensus_bg")"
+    robust_bw_tmp="${tmp_dir}/$(basename "$robust_bw")"
+    robust_bg_tmp="${tmp_dir}/$(basename "$robust_bg")"
 
-    local reads
-    reads=$(samtools view -@ "${THREADS_BIGWIG}" -c -F 4 "$std_bam" 2>/dev/null || echo 0)
-    if [[ "$reads" -le 0 ]]; then
-        warn "Zero reads in filtered BAM for $key — cannot create peak-normalised bigwig"
-        rm -f "$std_bam" "${std_bam}.bai"
-        return 1
-    fi
-
-    # DESeq2 size factors are calculated from reads within the consensus peak set.
-    # Do not combine this with an additional reads-per-million divisor.
-    local scale
-    scale=$(awk "BEGIN {printf \"%.10f\", 1/$size_factor}")
-    bamCoverage --bam "$std_bam" --outFileName "$bw" --outFileFormat bigwig \
-        --normalizeUsing None --scaleFactor "$scale" --binSize "${TRACK_BIN_SIZE:-10}" \
-        --numberOfProcessors "${THREADS_BIGWIG:-2}" ${BAMCOVERAGE_COMMON_ARGS:-}
-    rm -f "$std_bam" "${std_bam}.bai"
-    log "  DESeq2-consensus-normalised bigWig generated: $bw"
+    while IFS=$'\t' read -r output format scale label; do
+        if ! write_scaled_coverage_track "$std_bam" "$output" "$format" "$scale" "$layout" \
+            "${TRACK_BIN_SIZE:-10}" "${THREADS_BIGWIG:-2}"; then
+            warn "bamCoverage failed for $label: $key"
+            rm -rf "$tmp_dir"
+            return 1
+        fi
+    done <<EOF
+$consensus_bw_tmp	bigwig	$consensus_scale	DESeq2-consensus
+$consensus_bg_tmp	bedgraph	$consensus_scale	DESeq2-consensus
+$robust_bw_tmp	bigwig	$robust_scale	DESeq2-robust-CPM
+$robust_bg_tmp	bedgraph	$robust_scale	DESeq2-robust-CPM
+EOF
+    mv -f "$consensus_bw_tmp" "$consensus_bw"
+    mv -f "$consensus_bg_tmp" "$consensus_bg"
+    mv -f "$robust_bw_tmp" "$robust_bw"
+    mv -f "$robust_bg_tmp" "$robust_bg"
+    rm -rf "$tmp_dir"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$key" "$genome" "$layout" "$signal_unit" "$signal_count" "$consensus_count_sum" \
+        "$cohort_geometric_mean" "$size_factor" "$consensus_scale" "$robust_scale" \
+        >> "$TRACK_NORMALIZATION_TSV"
+    log "  DESeq2 consensus and robust CPM bigWig/bedGraph tracks generated for $key"
 }
 
 compute_frip() {
@@ -199,14 +233,14 @@ log "=== Phase 1: Per-sample metrics ==="
 
 declare -A seen_keys
 declare -a SAMPLE_KEYS SAMPLE_BAMS SAMPLE_NARROW SAMPLE_BROAD SAMPLE_BIGWIGS
-declare -A SAMPLE_GENOME SAMPLE_ASSAY
+declare -A SAMPLE_GENOME SAMPLE_ASSAY SAMPLE_LAYOUT
 
 while IFS=',' read -r sid fq1 fq2 layout genome assay factor condition treatment \
     cell_type rep tech_rep is_ctrl ctrl_id macs2_mode blacklist rest; do
 
     [[ "$sid" == "sample_id" ]] && continue
     sid="${sid//\"/}"; rep="${rep//\"/}"; is_ctrl="${is_ctrl//\"/}"
-    assay="${assay//\"/}"; genome="${genome//\"/}"
+    assay="${assay//\"/}"; genome="${genome//\"/}"; layout="${layout//\"/}"
     [[ "${is_ctrl,,}" == "true" || "$is_ctrl" == "1" ]] && continue
 
     KEY="${sid}_bioR${rep}"
@@ -222,6 +256,7 @@ while IFS=',' read -r sid fq1 fq2 layout genome assay factor condition treatment
     log "Processing: $KEY (assay=$assay genome=$genome)"
     SAMPLE_GENOME["$KEY"]="$genome"
     SAMPLE_ASSAY["$KEY"]="${assay,,}"
+    SAMPLE_LAYOUT["$KEY"]="${layout^^}"
 
     # Picard dup metrics (pre-computed in Step 5)
     DUP_METRICS=$(find \
@@ -230,9 +265,9 @@ while IFS=',' read -r sid fq1 fq2 layout genome assay factor condition treatment
         "${BAM_DIR}/../dedupBams" \
         -name "${KEY}_dup_metrics.txt" 2>/dev/null | head -1)
     DUP_PCT="NA"
-    [[ -f "$DUP_METRICS" ]] && \
-        DUP_PCT=$(awk '/^LIBRARY/{found=1;next} found&&NF>0{printf "%.2f",$9*100;exit}' \
-            "$DUP_METRICS" 2>/dev/null || echo "NA")
+    if [[ -f "$DUP_METRICS" ]]; then
+        DUP_PCT=$(picard_duplication_pct "$DUP_METRICS" 2>/dev/null || echo "NA")
+    fi
 
     TOTAL_READS=$(samtools view -c -F 4 "$BAM" 2>/dev/null || echo 0)
 
@@ -298,8 +333,8 @@ while IFS=',' read -r sid fq1 fq2 layout genome assay factor condition treatment
     fi
     [[ "$N_BROAD" -gt 0 ]] && FRIP_BROAD=$(compute_frip "$BAM" "$BROAD_PEAK")
 
-    BW="${BIGWIG_DIR}/${KEY}_dedup_blFilt_RPM.bw"
-    [[ ! -f "$BW" ]] && BW="${BIGWIG_DIR}/${KEY}_RPM.bw"
+    BW="${BIGWIG_DIR}/${KEY}_dedup_blFilt_CPM.bw"
+    [[ ! -f "$BW" ]] && BW="${BIGWIG_DIR}/${KEY}_CPM.bw"
 
     SAMPLE_KEYS+=("$KEY")
     SAMPLE_BAMS+=("$BAM")
@@ -322,6 +357,23 @@ if [[ $N_SAMPLES -eq 0 ]]; then
     exit 0
 fi
 
+# One multiBamSummary invocation must use one signal definition. Mixing PE
+# fragments and SE reads in the same normalization cohort is not comparable.
+declare -A NORMALIZATION_LAYOUTS=()
+for KEY in "${SAMPLE_KEYS[@]}"; do
+    NORMALIZATION_LAYOUTS["${SAMPLE_LAYOUT[$KEY]}"]=1
+done
+if (( ${#NORMALIZATION_LAYOUTS[@]} != 1 )); then
+    warn "Mixed PE/SE layouts are not supported in one DESeq2 normalization cohort"
+    exit 1
+fi
+NORMALIZATION_LAYOUT="${SAMPLE_LAYOUT[${SAMPLE_KEYS[0]}]}"
+declare -a PEAK_SIGNAL_ARGS=()
+deeptools_signal_args "$NORMALIZATION_LAYOUT" PEAK_SIGNAL_ARGS || {
+    warn "Unsupported normalization layout: $NORMALIZATION_LAYOUT"
+    exit 1
+}
+
 # =============================================================================
 # Phase 2: Chromosome-wide karyogram plots (ChIPQC-style)
 # Strategy: bamCoverage --binSize 100000 → bedGraph per sample
@@ -336,47 +388,46 @@ for i in "${!SAMPLE_KEYS[@]}"; do
     KEY="${SAMPLE_KEYS[$i]}"
     BAM="${SAMPLE_BAMS[$i]}"
     GENOME="${SAMPLE_GENOME[$KEY]:-hg38}"
-
-    # Resolve chrom sizes from config (same vars as genomecoverage_single.sh)
-    if [[ "${GENOME,,}" == "hg38" ]]; then
-        CHROM_SIZES="${CHROM_SIZES_HUMAN:-}"
-    else
-        CHROM_SIZES="${CHROM_SIZES_MOUSE:-}"
+    declare -a KARYO_CONTIGS=() KARYO_SIGNAL_ARGS=()
+    mapfile -t KARYO_CONTIGS < <(canonical_contigs_from_bam "$BAM" "$GENOME")
+    deeptools_signal_args "${SAMPLE_LAYOUT[$KEY]}" KARYO_SIGNAL_ARGS || {
+        warn "  unsupported layout for karyogram: $KEY"
+        continue
+    }
+    if (( ${#KARYO_CONTIGS[@]} == 0 )); then
+        warn "  no canonical chromosomes for karyogram: $KEY"
+        continue
+    fi
+    KARYO_TMP="$(mktemp -d "${QC_CHRPLOTS}/.${KEY}.canonical.XXXXXX")"
+    KARYO_BAM="${KARYO_TMP}/${KEY}.canonical.bam"
+    if ! samtools view -@ "$THREADS" -b -o "$KARYO_BAM" "$BAM" "${KARYO_CONTIGS[@]}" \
+        || ! samtools index -@ "$THREADS" "$KARYO_BAM"; then
+        warn "  canonical BAM preparation failed for karyogram: $KEY"
+        rm -rf "$KARYO_TMP"
+        continue
     fi
 
     BG_OUT="${QC_CHRPLOTS}/${KEY}_100kb.bedGraph"
-    BW_OUT="${QC_CHRPLOTS}/${KEY}_100kb.bw"
 
     if [[ ! -f "$BG_OUT" ]]; then
-        # bamCoverage → bigWig, then bigWigToBedGraph for the Python plotter
-        # OR use bedtools genomecov directly for bedGraph (no Kent tools needed)
         log "  bamCoverage 100kb: $KEY"
-        bamCoverage \
-            -b "$BAM" \
+        if bamCoverage \
+            -b "$KARYO_BAM" \
             --binSize 100000 \
             --normalizeUsing RPKM \
             --skipNonCoveredRegions \
             --outFileFormat bedgraph \
+            "${KARYO_SIGNAL_ARGS[@]}" \
             -p "$THREADS" \
             -o "$BG_OUT" \
-            >> "$MAIN_LOG" 2>&1 \
-        && log "  bamCoverage OK: $KEY" \
-        || {
-            warn "  bamCoverage FAILED: $KEY — trying bedtools genomecov fallback"
-            # Fallback: bedtools genomecov in 100kb windows via makewindows + intersect
-            if [[ -n "$CHROM_SIZES" && -f "$CHROM_SIZES" ]]; then
-                bedtools makewindows -g "$CHROM_SIZES" -w 100000 \
-                    | awk '$1~/^chr[0-9XY]+$/ || $1=="chrM"' \
-                    > "${QC_CHRPLOTS}/tmp_tiles.bed" 2>/dev/null
-                bedtools coverage -a "${QC_CHRPLOTS}/tmp_tiles.bed" -b "$BAM" -counts \
-                    | awk '{print $1"\t"$2"\t"$3"\t"$4}' \
-                    > "$BG_OUT" 2>/dev/null \
-                    && log "  bedtools fallback OK: $KEY" \
-                    || warn "  bedtools fallback also FAILED: $KEY"
-                rm -f "${QC_CHRPLOTS}/tmp_tiles.bed"
-            fi
-        }
+            >> "$MAIN_LOG" 2>&1; then
+            log "  bamCoverage OK: $KEY"
+        else
+            rm -f "$BG_OUT"
+            warn "  bamCoverage FAILED: $KEY; no read-based fallback is used for fragment-standardized signal"
+        fi
     fi
+    rm -rf "$KARYO_TMP"
 
     # Per-chromosome read count TSV (from idxstats — always fast)
     CHR_TSV="${QC_CHRPLOTS}/${KEY}_per_chrom.tsv"
@@ -449,6 +500,7 @@ LABELS=("${SAMPLE_KEYS[@]}")
     multiBamSummary bins \
         -b "${BAM_LIST[@]}" \
         --labels "${LABELS[@]}" \
+        "${PEAK_SIGNAL_ARGS[@]}" \
         -p "$THREADS" \
         -o "${QC_DT}/multiBamSummary_bins.npz" \
         --outRawCounts "${QC_MATRICES}/multiBamSummary_bins.tab" \
@@ -498,8 +550,23 @@ fi
 log "=== Phase 4: Consensus peaks + peak-centric QC ==="
 
 NARROW_WITH_PEAKS=(); BROAD_WITH_PEAKS=()
-for pk in "${SAMPLE_NARROW[@]}"; do [[ -f "$pk" && -s "$pk" ]] && NARROW_WITH_PEAKS+=("$pk"); done
-for pk in "${SAMPLE_BROAD[@]}";  do [[ -f "$pk" && -s "$pk" ]] && BROAD_WITH_PEAKS+=("$pk");  done
+CANONICAL_PEAK_INPUT_DIR="${QC_PEAKS}/canonical_inputs"
+mkdir -p "$CANONICAL_PEAK_INPUT_DIR"
+for i in "${!SAMPLE_KEYS[@]}"; do
+    KEY="${SAMPLE_KEYS[$i]}"; GENOME="${SAMPLE_GENOME[$KEY]}"
+    pk="${SAMPLE_NARROW[$i]}"
+    if [[ -f "$pk" && -s "$pk" ]]; then
+        canonical_pk="${CANONICAL_PEAK_INPUT_DIR}/${KEY}.narrow.canonical.bed"
+        canonicalize_peak_file "$pk" "$canonical_pk" "$GENOME" || { warn "Canonical narrow-peak filtering failed for $KEY"; exit 1; }
+        [[ -s "$canonical_pk" ]] && NARROW_WITH_PEAKS+=("$canonical_pk")
+    fi
+    pk="${SAMPLE_BROAD[$i]}"
+    if [[ -f "$pk" && -s "$pk" ]]; then
+        canonical_pk="${CANONICAL_PEAK_INPUT_DIR}/${KEY}.broad.canonical.bed"
+        canonicalize_peak_file "$pk" "$canonical_pk" "$GENOME" || { warn "Canonical broad-peak filtering failed for $KEY"; exit 1; }
+        [[ -s "$canonical_pk" ]] && BROAD_WITH_PEAKS+=("$canonical_pk")
+    fi
+done
 
 MERGED_NARROW="${QC_PEAKS}/merged_narrow.bed"
 MERGED_BROAD="${QC_PEAKS}/merged_broad.bed"
@@ -552,6 +619,7 @@ if [[ -f "$CONSENSUS_PEAK" && -s "$CONSENSUS_PEAK" ]]; then
         --BED "$CONSENSUS_PEAK" \
         -b "${BAM_LIST[@]}" \
         --labels "${LABELS[@]}" \
+        "${PEAK_SIGNAL_ARGS[@]}" \
         -p "$THREADS" \
         -o "${QC_DT}/multiBamSummary_peaks.npz" \
         --outRawCounts "${QC_MATRICES}/multiBamSummary_peaks.tab" \
@@ -654,17 +722,31 @@ if [[ -f "$CONSENSUS_PEAK" && -s "$CONSENSUS_PEAK" ]]; then
     fi
 
     if [[ -s "$CONSENSUS_SIZEFACTORS_TSV" ]] && command -v bamCoverage >/dev/null 2>&1; then
-        log "=== Phase 5: DESeq2 consensus-peak-normalized bigWig generation ==="
+        log "=== Phase 5: DESeq2 consensus and robust CPM bigWig/bedGraph generation ==="
+        TRACK_NORMALIZATION_TSV="${QC_TABLES}/track_normalization_metadata.tsv"
+        printf 'key\tgenome\tlayout\tsignal_unit\tcpm_normalization_count\tconsensus_count_sum\tcohort_geometric_mean_column_sum\tsize_factor\tdeseq2_consensus_scale\tdeseq2_robust_cpm_scale\n' \
+            > "$TRACK_NORMALIZATION_TSV"
         for i in "${!SAMPLE_KEYS[@]}"; do
             KEY="${SAMPLE_KEYS[$i]}"; BAM="${SAMPLE_BAMS[$i]}"
-            SIZE_FACTOR=$(awk -F'\t' -v key="$KEY" '$2==key {print $3}' "$CONSENSUS_SIZEFACTORS_TSV" | head -1)
-            [[ -z "$SIZE_FACTOR" ]] && continue
-            generate_peaknorm_bigwig "$BAM" "$KEY" "$SIZE_FACTOR" || { warn "DESeq2 consensus bigWig failed for $KEY"; exit 1; }
+            SIZE_FACTOR=$(consensus_size_factor_for_key "$CONSENSUS_SIZEFACTORS_TSV" "$KEY" 2>/dev/null || true)
+            [[ -n "$SIZE_FACTOR" ]] || { warn "No valid DESeq2 size factor found for $KEY"; exit 1; }
+            ROBUST_SCALE=$(consensus_table_value_for_key "$CONSENSUS_SIZEFACTORS_TSV" "$KEY" deseq2_robust_cpm_scale 2>/dev/null || true)
+            CONSENSUS_COUNT_SUM=$(consensus_table_value_for_key "$CONSENSUS_SIZEFACTORS_TSV" "$KEY" consensus_count_sum 2>/dev/null || true)
+            COHORT_GEOMEAN=$(consensus_table_value_for_key "$CONSENSUS_SIZEFACTORS_TSV" "$KEY" cohort_geometric_mean_column_sum 2>/dev/null || true)
+            [[ -n "$ROBUST_SCALE" && -n "$CONSENSUS_COUNT_SUM" && -n "$COHORT_GEOMEAN" ]] || {
+                warn "Incomplete robust CPM metadata for $KEY"
+                exit 1
+            }
+            generate_deseq2_tracks "$BAM" "$KEY" "${SAMPLE_LAYOUT[$KEY]}" "$SIZE_FACTOR" \
+                "$ROBUST_SCALE" "$CONSENSUS_COUNT_SUM" "$COHORT_GEOMEAN" \
+                || { warn "DESeq2 track generation failed for $KEY"; exit 1; }
         done
-        log "DESeq2 consensus-normalised bigWig directory: $BIGWIG_PEAKNORM_DIR"
+        log "DESeq2 consensus tracks: $BIGWIG_PEAKNORM_DIR"
+        log "DESeq2 robust CPM tracks: $BIGWIG_ROBUST_DIR"
+        log "Track normalization metadata: $TRACK_NORMALIZATION_TSV"
     else
         if [[ "${GENERATE_DESEQ2_CONSENSUS_TRACKS:-true}" == "true" ]]; then
-            warn "Missing size factors or bamCoverage for required DESeq2 consensus-normalised bigWigs"
+            warn "Missing size factors or bamCoverage for required DESeq2 tracks"
             exit 1
         fi
     fi

@@ -21,7 +21,7 @@ which genome to use, how to pair IPs with controls, and what type of peaks to ca
 | 1 | `sample_id` | string | ✓ | Unique identifier for this library. Used as the key for all output file names. |
 | 2 | `fastq_1` | path | ✓ | Absolute path to R1 FASTQ (`.fastq.gz`). |
 | 3 | `fastq_2` | path | PE only | Absolute path to R2 FASTQ. Leave empty for SE samples. |
-| 4 | `layout` | `SE`\|`PE` | ✓ | Single-end or paired-end. |
+| 4 | `layout` | `SE`\|`PE` | ✓ | Single-end or paired-end. Every row in one run must use the same layout. |
 | 5 | `genome` | `hg38`\|`mm39` | ✓ | Reference genome for alignment and peak calling. |
 | 6 | `assay` | string | ✓ | Assay type, e.g. `ChIP-seq`, `ATAC-seq`, `CUT&RUN`, `ChIPmentation`. |
 | 7 | `factor` | string | ✓ | Antibody target or histone mark, e.g. `H3K27ac`, `CTCF`, `Input`. |
@@ -46,21 +46,29 @@ which genome to use, how to pair IPs with controls, and what type of peaks to ca
 **IP samples**
 - Set `is_control=FALSE`.
 - `control_id` must exactly match the `sample_id` of the appropriate control.
-- `macs2_mode=both` runs MACS3 in both narrow and broad mode (recommended for most marks).
+- `macs2_mode=both` runs MACS3 in both narrow and broad mode. It is required for
+  every non-control sample when `RUN_DESEQ2ATAC=true`, because DESeq2ATAC runs
+  separate broad- and narrow-consensus analyses.
 
 **Technical replicates**
 - Add one row per sequencing run with the same `sample_id`, `replicate`, and different
   `tech_replicate` (1, 2, …).
 - The pipeline merges their FASTQs before trimming.
 
+**Sequencing layout**
+- Use a PE-only or SE-only samplesheet; mixed PE/SE runs are rejected during validation.
+- PE normalization counts properly paired fragments once.
+- SE normalization uses one filtered alignment per observation with `SE_SIGNAL_MODE="read"`; leave `fastq_2` empty.
+- Use separate output directories because PE fragment signal and SE read signal are different units.
+
 **Batch metadata (optional)**
 - You may add an optional `batch` column to the samplesheet.
 - The pipeline preserves this field in DiffBind sample sheets if present.
 - Use `batch` when you have known technical batches, library prep blocks, or sequencing lanes.
 
-**Mixed genomes**
-- hg38 and mm39 rows can coexist in the same samplesheet.
-- Steps 8–11 iterate over each genome separately.
+**Genome build**
+- Use one genome build per samplesheet; mixed hg38/mm39 runs are rejected.
+- Use a separate configuration and output directory for each genome build.
 
 **macs2_mode guidance**
 
@@ -68,20 +76,25 @@ which genome to use, how to pair IPs with controls, and what type of peaks to ca
 |---|---|
 | H3K27ac, H3K4me3, H3K4me1, p63, CTCF, SATB1 | `both` |
 | H3K27me3, H3K9me3, H3K36me3 | `both` (broad peaks are primary) |
-| ATAC-seq | `narrow` |
+| ATAC-seq | `both` with DESeq2ATAC enabled; otherwise `narrow` |
 | CUT&RUN, CUT&TAG, ChIPmentation | `narrow` (or `both`) |
 | Input / IgG | `none` |
 
 ---
 
-### Example samplesheet
+### Example samplesheets
+
+The repository provides layout-specific ATAC-seq examples:
+
+- `config/samplesheet_example_atac.csv` — paired-end;
+- `config/samplesheet_example_atac_se.csv` — single-end.
+
+Minimal SE rows look like this:
 
 ```csv
 sample_id,fastq_1,fastq_2,layout,genome,assay,factor,condition,treatment,cell_type,replicate,tech_replicate,is_control,control_id,macs2_mode,blacklist,output_prefix
-NHEK_Input_bioR1,/data/NHEK_Input_R1.fastq.gz,,SE,hg38,ChIP-seq,Input,day0,none,NHEK,1,1,TRUE,,none,/ref/blacklist_hg38.bed,NHEK_Input_bioR1
-NHEK_H3K27ac_day0_bioR1,/data/NHEK_H3K27ac_d0_R1.fastq.gz,,SE,hg38,ChIP-seq,H3K27ac,day0,none,NHEK,1,1,FALSE,NHEK_Input_bioR1,both,/ref/blacklist_hg38.bed,NHEK_H3K27ac_day0_bioR1
-Tco_rest_1_SATB1_bioR1,/data/Tco_SATB1_R1.fastq.gz,/data/Tco_SATB1_R2.fastq.gz,PE,hg38,ChIP-seq,SATB1,rest,DSG_FA,LymphocyteT,1,1,FALSE,Tco_rest_1_Input_bioR1,both,/ref/blacklist_hg38.bed,Tco_rest_1_SATB1_bioR1
-Tco_rest_1_Input_bioR1,/data/Tco_Input_R1.fastq.gz,/data/Tco_Input_R2.fastq.gz,PE,hg38,ChIP-seq,Input,rest,DSG_FA,LymphocyteT,1,1,TRUE,,none,/ref/blacklist_hg38.bed,Tco_rest_1_Input_bioR1
+ATAC_SE_WT_R1,/data/ATAC_SE_WT_R1.fastq.gz,,SE,hg38,ATAC-seq,accessibility,WT,none,cell,1,1,FALSE,,narrow,/ref/blacklist_hg38.bed,ATAC_SE_WT_R1
+ATAC_SE_WT_R2,/data/ATAC_SE_WT_R2.fastq.gz,,SE,hg38,ATAC-seq,accessibility,WT,none,cell,2,1,FALSE,,narrow,/ref/blacklist_hg38.bed,ATAC_SE_WT_R2
 ```
 
 > Use `python3 scripts/validate_samplesheet.py samplesheet.csv` to check for errors before running.
@@ -165,6 +178,7 @@ Peak concurrent CPU usage: `THREADS_PARALLEL_JOBS × THREADS_ALIGN`
 | `CONSENSUS_MIN_SAMPLES` | Distinct biological samples required to support a consensus interval | `2` |
 | `ALLOW_SINGLE_SAMPLE_CONSENSUS` | Permit a one-sample fallback | `false` |
 | `GENERATE_DESEQ2_CONSENSUS_TRACKS` | Generate consensus-count DESeq2-scaled tracks | `true` |
+| `SE_SIGNAL_MODE` | SE normalization unit; currently only one retained `read` is supported | `read` |
 | `RUN_ATAQV_QC` | Run TSS enrichment and ATAC fragment QC | `true` |
 | `GENERATE_ATAQV_VIEWER` | Build the local interactive ataqv viewer | `true` |
 | `FRAGMENT_PLOT_MAX_BP` | Maximum fragment length shown in periodicity plots | `1000` |

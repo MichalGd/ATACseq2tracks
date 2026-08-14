@@ -6,7 +6,7 @@
 
 ## Output directory tree
 
-> v3.2.0 naming: RPM tracks end in `_RPM.bw`; consensus-scaled tracks are stored in `bigwig_deseq2_consensus/` and end in `_DESeq2Consensus.bw`. ATAC-specific QC is under `qc_post_alignment/atac_qc/`, including `tables/ataqv_selected_metrics.tsv`, `tables/nucleosome_periodicity_metrics.tsv`, compressed `ataqv_metrics/*.ataqv.json.gz`, static fragment-periodicity PNG/PDF plots, and the optional `ataqv_viewer/`.
+> Track naming: CPM tracks end in `_CPM.bw`. Consensus-scaled files are stored in `bigwig_deseq2_consensus/` as `_DESeq2Consensus.{bw,bedGraph}`; robust CPM files are stored in `bigwig_deseq2_robust_cpm/` as `_DESeq2RobustCPM.{bw,bedGraph}`. CPM bedGraphs are not generated.
 
 ```
 <OUTPUT_DIR>/
@@ -37,17 +37,19 @@
 ├── filteredBams/                      # BAMs after blacklist filtering
 │   └── <sample_id>_bioR<N>_dedup_blFilt.bam
 │
-├── bedGraph/                          # Raw coverage bedGraphs
-├── NormBedGraph/                      # Library-size normalised bedGraphs
+├── bigwig/                            # Per-replicate fragment/read CPM bigWigs
+│   └── <sample_id>_bioR<N>_dedup_blFilt_CPM.bw
 │
-├── bigwig/                            # Per-replicate bigwig tracks
-│   └── <sample_id>_bioR<N>_dedup_blFilt_RPM.bw
+├── bigwig_deseq2_consensus/           # Reciprocal-size-factor coverage
+│   ├── <sample_id>_bioR<N>_dedup_blFilt_DESeq2Consensus.bw
+│   └── <sample_id>_bioR<N>_dedup_blFilt_DESeq2Consensus.bedGraph
 │
-├── bigwig_deseq2_consensus/           # DESeq2 consensus-peak-scaled bigWig tracks
-│   └── <sample_id>_bioR<N>_dedup_blFilt_DESeq2Consensus.bw
+├── bigwig_deseq2_robust_cpm/          # DESeq2 robust CPM/FPM-style coverage
+│   ├── <sample_id>_bioR<N>_dedup_blFilt_DESeq2RobustCPM.bw
+│   └── <sample_id>_bioR<N>_dedup_blFilt_DESeq2RobustCPM.bedGraph
 │
 ├── bigwig_merged/                     # Condition-group merged bigwig tracks
-│   └── <factor>__<condition>__<treatment>__<cell_type>__<genome>.bw
+│   └── <factor>_<condition>_<treatment>_<cell_type>_merged_CPM.bw
 │
 ├── peaks/
 │   ├── per_replicate/
@@ -70,6 +72,7 @@
 │   │   ├── qc_warnings.tsv            # Flagged samples with warning codes
 │   │   ├── frip_consensus.tsv         # FRiP over merged consensus peak set
 │   │   ├── consensus_sizeFactors.tsv  # DESeq2 consensus peak size factors
+│   │   ├── track_normalization_metadata.tsv # Counts, constants and scales used for tracks
 │   │   ├── per_chromosome_reads.tsv   # Read counts per chromosome per sample
 │   │   └── fingerprint_metrics.tsv    # deepTools fingerprint raw values
 │   ├── plots/
@@ -101,6 +104,11 @@
 │   ├── diffbind_samplesheet_hg38_broad.csv
 │   └── (mm39 equivalents if applicable)
 │
+├── deseq2atac/
+│   ├── deseq2atac_peak_type_summary.tsv
+│   ├── broad/                         # Independent broad consensus and DESeq2 model
+│   └── narrow/                        # Independent narrow consensus and DESeq2 model
+│
 ├── logs/                              # Batch log files per step
 │
 └── reports/
@@ -114,12 +122,12 @@
 
 ### bigwig tracks
 
-Bigwig files (`.bw`) contain per-base coverage normalised by library size. Load them directly into:
+BigWig files (`.bw`) contain binned coverage under the normalization named in each suffix. Load them directly into:
 - [UCSC Genome Browser](https://genome.ucsc.edu/cgi-bin/hgGateway)
 - [IGV](https://igv.org/)
 - [deepTools](https://deeptools.readthedocs.io/) for heatmaps and profile plots
 
-Per-replicate tracks are in `bigwig/`. Merged (averaged across replicates) tracks are in `bigwig_merged/`.
+For paired-end samples, coverage represents fragments counted once and extended over their inserts; single-end coverage represents reads. All three families use canonical autosomes plus X/Y. Robust CPM is the consensus-scaled track multiplied by one cohort-wide constant, so it does not add a new between-sample correction. The DESeq2 families are cohort-dependent and should not be treated as absolutely comparable across independently normalized studies.
 
 ### MACS2 peak files
 
@@ -163,6 +171,29 @@ FRiP thresholds (assay-dependent — see [Post-alignment QC](12_post_alignment_q
 
 Ready-to-use input for the Bioconductor `DiffBind` package.
 See [Downstream: DiffBind](08_diffbind.md).
+
+### DESeq2ATAC outputs
+
+`deseq2atac/broad/` and `deseq2atac/narrow/` contain separate BED4 consensus
+sets, support tables, raw and normalized count matrices, sample/library metadata,
+DESeq2 size factors, complete and FDR-filtered results, serialized objects,
+session information and paired PNG/PDF diagnostics. The top-level
+`deseq2atac_peak_type_summary.tsv` compares region, tested-site and significant-
+site counts between the two analyses.
+
+For each peak type, per-sample peaks are canonical/blacklist filtered and reduced,
+then disjoined across samples. Atomic segments supported by at least
+`DESEQ2ATAC_MIN_SAMPLES` biological samples are retained and adjacent retained
+segments are reduced into the final non-overlapping consensus. This is not a
+one-sample union. Narrow DESeq2ATAC regions retain narrowPeak-derived boundaries;
+unlike DiffBind, they are not recentered to 201-bp summit windows.
+
+The complete result table preserves independent-filtered `padj=NA` entries. The
+significant table remains a valid header-only compressed table when no region
+passes `DESEQ2ATAC_ALPHA`; this is a successful result, not a workflow failure.
+
+`reports/differential_accessibility_summary.tsv` records tested/significant site
+counts and summary-file paths for the DiffBind and DESeq2ATAC broad/narrow runs.
 
 ---
 

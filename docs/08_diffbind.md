@@ -85,3 +85,9 @@ bash scripts/diffbind_analysis.sh diffbind diffbind_results
 ```
 
 This writes results and diagnostic plots under `diffbind_results/`.
+
+Automated ATAC counting uses `DIFFBIND_SUMMITS=100` by default, yielding an
+approximately 201-bp summit-centred window. Set `DIFFBIND_SUMMITS=200` in the
+configuration to reproduce the previous approximately 401-bp behavior. The
+independent broad- and narrow-consensus DESeq2ATAC peer module is documented in
+[Differential accessibility](13_differential_accessibility.md).

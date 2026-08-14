@@ -16,6 +16,7 @@ set -euo pipefail
 
 INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_DIR="${INSTALL_DIR}/scripts"
+INPUT_SANITIZER="${SCRIPT_DIR}/sanitize_text_inputs.py"
 F2T_CONFIG=""
 PIPELINE_VERSION="$(tr -d '[:space:]' < "${INSTALL_DIR}/VERSION" 2>/dev/null || echo 3.2.0)"
 
@@ -34,6 +35,12 @@ done
 
 [[ -z "$F2T_CONFIG" ]] && { echo "ERROR: --config is required" >&2; usage; }
 [[ -f "$F2T_CONFIG" ]] || { echo "ERROR: config file not found: $F2T_CONFIG" >&2; exit 1; }
+[[ -f "$INPUT_SANITIZER" ]] || { echo "ERROR: input sanitizer not found: $INPUT_SANITIZER" >&2; exit 1; }
+command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 is required to validate input text files" >&2; exit 1; }
+
+# Normalize the config before Bash sources it. Affected files are backed up
+# beside the original; clean UTF-8/LF files are left byte-for-byte unchanged.
+python3 "$INPUT_SANITIZER" "$F2T_CONFIG"
 
 export F2T_CONFIG
 source "$F2T_CONFIG"
@@ -41,6 +48,7 @@ source "$F2T_CONFIG"
 [[ -z "${SAMPLESHEET:-}" ]] && { echo "ERROR: SAMPLESHEET not set in $F2T_CONFIG" >&2; exit 1; }
 [[ -z "${OUTPUT_DIR:-}"  ]] && { echo "ERROR: OUTPUT_DIR not set in $F2T_CONFIG"  >&2; exit 1; }
 [[ -f "$SAMPLESHEET"     ]] || { echo "ERROR: SAMPLESHEET not found: $SAMPLESHEET" >&2; exit 1; }
+python3 "$INPUT_SANITIZER" "$SAMPLESHEET"
 
 echo "============================================================"
 echo " ATACseq2tracks v${PIPELINE_VERSION}"
@@ -79,12 +87,15 @@ mkdir -p \
     "${OUTPUT_DIR}/NormBedGraph" \
     "${OUTPUT_DIR}/bigwig" \
     "${OUTPUT_DIR}/bigwig_deseq2_consensus" \
+    "${OUTPUT_DIR}/bigwig_deseq2_robust_cpm" \
     "${OUTPUT_DIR}/bigwig_merged" \
     "${OUTPUT_DIR}/peaks/per_replicate" \
     "${OUTPUT_DIR}/peaks/pooled" \
     "${OUTPUT_DIR}/chipqc" \
     "${OUTPUT_DIR}/qc_post_alignment" \
     "${OUTPUT_DIR}/diffbind" \
+    "${OUTPUT_DIR}/diffbind_results" \
+    "${OUTPUT_DIR}/deseq2atac" \
     "${OUTPUT_DIR}/reports"
 
 [[ -n "${CONDA_ENV_ACTIVATE:-}" && -f "${CONDA_ENV_ACTIVATE}" ]] && source "${CONDA_ENV_ACTIVATE}"
@@ -138,7 +149,7 @@ if is_done 5; then skip_msg 5; else
     echo "=== [5] Picard deduplication ==="
     bash "${SCRIPT_DIR}/picard_dedup_batch.sh" \
         "${OUTPUT_DIR}/bams" "${OUTPUT_DIR}/dedupBams" "${THREADS_PARALLEL_JOBS}"
-    multiqc "${OUTPUT_DIR}/dedupBams" -n multiQC_deduplication \
+    multiqc "${OUTPUT_DIR}/dedupBams" "${OUTPUT_DIR}/logs/picard" -n multiQC_deduplication \
         -o "${OUTPUT_DIR}/multiQC/multiQC_deduplication" --data-format tsv --export
     mark_done 5
 fi
@@ -153,7 +164,7 @@ fi
 
 # ── Step 7: Genome coverage ───────────────────────────────────────────────────
 if is_done 7; then skip_msg 7; else
-    echo "=== [7] Genome coverage (individual) ==="
+    echo "=== [7] Fragment/read CPM coverage (individual) ==="
     bash "${SCRIPT_DIR}/genomecoverage_batch.sh" \
         "$SAMPLESHEET" "${OUTPUT_DIR}/filteredBams" "${OUTPUT_DIR}/bigwig"
     mark_done 7
@@ -161,7 +172,7 @@ fi
 
 # ── Step 8: Replicate merging ─────────────────────────────────────────────────
 if is_done 8; then skip_msg 8; else
-    echo "=== [8] Replicate merging + merged tracks ==="
+    echo "=== [8] Replicate merging + merged CPM tracks ==="
     for GENOME in hg38 mm39; do
         grep -q ",$GENOME," "$SAMPLESHEET" && \
             bash "${SCRIPT_DIR}/merge_replicates.sh" \
@@ -214,27 +225,60 @@ if is_done 11; then skip_msg 11; else
 fi
 
 # ── Step 12: DiffBind differential analysis ──────────────────────────────────
+DIFFERENTIAL_ANALYSIS_FAILURES=0
 if is_done 12; then skip_msg 12; else
     echo "=== [12] DiffBind differential analysis ==="
-    bash "${SCRIPT_DIR}/diffbind_analysis.sh" \
-        "${OUTPUT_DIR}/diffbind" "${OUTPUT_DIR}/diffbind_results"
-    mark_done 12
+    if bash "${SCRIPT_DIR}/diffbind_analysis.sh" \
+        "${OUTPUT_DIR}/diffbind" "${OUTPUT_DIR}/diffbind_results"; then
+        mark_done 12
+    else
+        echo "ERROR: DiffBind failed; DESeq2ATAC will still be attempted" >&2
+        DIFFERENTIAL_ANALYSIS_FAILURES=$((DIFFERENTIAL_ANALYSIS_FAILURES + 1))
+    fi
 fi
+
+# Independent peer analysis. The alphanumeric checkpoint preserves the
+# established Step 13/14 checkpoint names and resumes separately from DiffBind.
+if [[ "${RUN_DESEQ2ATAC:-true}" == "true" ]]; then
+    if is_done 12a; then skip_msg 12a; else
+        echo "=== [12a] DESeq2ATAC differential accessibility analysis ==="
+        if bash "${SCRIPT_DIR}/deseq2atac_analysis.sh" \
+            "$SAMPLESHEET" "${OUTPUT_DIR}/filteredBams" "${OUTPUT_DIR}/peaks" \
+            "${OUTPUT_DIR}/deseq2atac"; then
+            mark_done 12a
+        else
+            echo "ERROR: DESeq2ATAC failed; existing DiffBind results are retained" >&2
+            DIFFERENTIAL_ANALYSIS_FAILURES=$((DIFFERENTIAL_ANALYSIS_FAILURES + 1))
+        fi
+    fi
+else
+    echo "=== [12a] DESeq2ATAC disabled by RUN_DESEQ2ATAC=false ==="
+fi
+
+(( DIFFERENTIAL_ANALYSIS_FAILURES == 0 )) || {
+    echo "ERROR: ${DIFFERENTIAL_ANALYSIS_FAILURES} differential-accessibility module(s) failed" >&2
+    exit 1
+}
 
 # ── Step 13: UCSC tracks ──────────────────────────────────────────────────────
 if is_done 13; then skip_msg 13; else
     echo "=== [13] UCSC tracks ==="
     bash "${SCRIPT_DIR}/create_ucsc_tracks.sh" \
-        "${OUTPUT_DIR}/bigwig" "${UCSC_BIGDATA_URL_BASE:-}" "${UCSC_TRACK_PREFIX:-ATAC-seq} RPM"
+        "${OUTPUT_DIR}/bigwig" "${UCSC_BIGDATA_URL_BASE:-}" "${UCSC_TRACK_PREFIX:-ATAC-seq} CPM"
     if find "${OUTPUT_DIR}/bigwig_deseq2_consensus" -maxdepth 1 -name '*.bw' -print -quit | grep -q .; then
         DESEQ2_URL="${UCSC_BIGDATA_URL_BASE:+${UCSC_BIGDATA_URL_BASE%/}/deseq2_consensus}"
         bash "${SCRIPT_DIR}/create_ucsc_tracks.sh" \
             "${OUTPUT_DIR}/bigwig_deseq2_consensus" "$DESEQ2_URL" "${UCSC_TRACK_PREFIX:-ATAC-seq} DESeq2 consensus"
     fi
+    if find "${OUTPUT_DIR}/bigwig_deseq2_robust_cpm" -maxdepth 1 -name '*.bw' -print -quit | grep -q .; then
+        ROBUST_URL="${UCSC_BIGDATA_URL_BASE:+${UCSC_BIGDATA_URL_BASE%/}/deseq2_robust_cpm}"
+        bash "${SCRIPT_DIR}/create_ucsc_tracks.sh" \
+            "${OUTPUT_DIR}/bigwig_deseq2_robust_cpm" "$ROBUST_URL" "${UCSC_TRACK_PREFIX:-ATAC-seq} DESeq2 robust CPM"
+    fi
     if find "${OUTPUT_DIR}/bigwig_merged" -maxdepth 1 -name '*.bw' -print -quit | grep -q .; then
         MERGED_URL="${UCSC_BIGDATA_URL_BASE:+${UCSC_BIGDATA_URL_BASE%/}/merged}"
         bash "${SCRIPT_DIR}/create_ucsc_tracks.sh" \
-            "${OUTPUT_DIR}/bigwig_merged" "$MERGED_URL" "${UCSC_TRACK_PREFIX:-ATAC-seq} merged RPM"
+            "${OUTPUT_DIR}/bigwig_merged" "$MERGED_URL" "${UCSC_TRACK_PREFIX:-ATAC-seq} merged CPM"
     fi
     mark_done 13
 fi
@@ -264,8 +308,9 @@ fi
 echo ""
 echo "=== ATACseq2tracks v${PIPELINE_VERSION} complete ==="
 echo "  Checkpoints   : ${CHECKPOINT_DIR}/"
-echo "  BigWig RPM    : ${OUTPUT_DIR}/bigwig/"
-echo "  BigWig DESeq2 : ${OUTPUT_DIR}/bigwig_deseq2_consensus/"
+echo "  BigWig CPM           : ${OUTPUT_DIR}/bigwig/"
+echo "  DESeq2 tracks        : ${OUTPUT_DIR}/bigwig_deseq2_consensus/"
+echo "  DESeq2 robust CPM    : ${OUTPUT_DIR}/bigwig_deseq2_robust_cpm/"
 echo "  BigWig merged : ${OUTPUT_DIR}/bigwig_merged/"
 echo "  Peaks narrow  : ${OUTPUT_DIR}/peaks/per_replicate/<sample>/narrow/"
 echo "  Peaks broad   : ${OUTPUT_DIR}/peaks/per_replicate/<sample>/broad/"
@@ -273,4 +318,5 @@ echo "  QC deepTools     : ${OUTPUT_DIR}/qc_post_alignment/"
 echo "  QC TSS/periodicity: ${OUTPUT_DIR}/qc_post_alignment/atac_qc/"
 echo "  DiffBind samples : ${OUTPUT_DIR}/diffbind/"
 echo "  DiffBind results : ${OUTPUT_DIR}/diffbind_results/"
+echo "  DESeq2ATAC       : ${OUTPUT_DIR}/deseq2atac/"
 echo "  Report           : ${OUTPUT_DIR}/reports/"

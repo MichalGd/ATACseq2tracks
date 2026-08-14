@@ -4,6 +4,8 @@ set -euo pipefail
 
 SAMPLESHEET_ARG="${1:?ERROR: pass samplesheet.csv as argument 1}"
 CONFIG="${2:?ERROR: pass config.conf as argument 2}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INPUT_SANITIZER="${SCRIPT_DIR}/sanitize_text_inputs.py"
 PASS=0
 FAIL=0
 WARN=0
@@ -13,23 +15,32 @@ fail() { printf '[FAIL] %s\n' "$1" >&2; FAIL=$((FAIL + 1)); }
 warn() { printf '[WARN] %s\n' "$1"; WARN=$((WARN + 1)); }
 
 [[ -f "$CONFIG" ]] || { echo "ERROR: config not found: $CONFIG" >&2; exit 1; }
+[[ -f "$INPUT_SANITIZER" ]] || { echo "ERROR: input sanitizer not found: $INPUT_SANITIZER" >&2; exit 1; }
+command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 is required to validate input text files" >&2; exit 1; }
+
+# This must happen before source: CRLF/UTF BOM artifacts can otherwise make a
+# valid Bash configuration fail before preflight begins.
+python3 "$INPUT_SANITIZER" "$CONFIG"
 # shellcheck disable=SC1090
 source "$CONFIG"
 SAMPLESHEET="$SAMPLESHEET_ARG"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[[ -f "$SAMPLESHEET" ]] || { echo "ERROR: samplesheet not found: $SAMPLESHEET" >&2; exit 1; }
+python3 "$INPUT_SANITIZER" "$SAMPLESHEET"
 VERSION_FILE="${SCRIPT_DIR}/../VERSION"
 VERSION="$(tr -d '[:space:]' < "$VERSION_FILE" 2>/dev/null || echo unknown)"
 
 echo "ATACseq2tracks ${VERSION} pre-flight"
 
-for script in validate_samplesheet.py fastqc_batch.sh trimgalore_batch.sh \
+for script in validate_samplesheet.py sanitize_text_inputs.py fastqc_batch.sh trimgalore_batch.sh \
     bowtie2_batch.sh picard_dedup_batch.sh blacklist_filter.sh \
     blacklist_filter_batch.sh genomecoverage_single.sh genomecoverage_batch.sh merge_replicates.sh \
     macs2_peaks.sh macs2_batch.sh post_alignment_qc_batch.sh \
-    consensus_peak_size_factors.R create_ucsc_tracks.sh ataqv_qc_batch.sh \
+    consensus_peak_size_factors.R qc_table_helpers.sh track_normalization_helpers.sh \
+    create_ucsc_tracks.sh ataqv_qc_batch.sh \
     prepare_tss_bed.py extract_ataqv_metrics.py plot_fragment_periodicity.py \
     plot_chrom_coverage.py peak_interpretation.sh prepare_diffbind.R \
-    diffbind_analysis.sh diffbind_analysis.R generate_pipeline_report.sh; do
+    diffbind_analysis.sh diffbind_analysis.R deseq2atac_analysis.sh \
+    deseq2atac_analysis.R generate_pipeline_report.sh; do
     [[ -f "${SCRIPT_DIR}/${script}" ]] && ok "script: ${script}" || fail "missing script: ${script}"
 done
 
@@ -38,8 +49,10 @@ if [[ "${RUN_ATAQV_QC:-true}" == "true" ]]; then
     if [[ "${GENERATE_ATAQV_VIEWER:-true}" == "true" ]]; then
         command -v mkarv >/dev/null 2>&1 && ok "tool: mkarv" || fail "tool not in PATH: mkarv"
     fi
-    python3 -c 'import matplotlib' >/dev/null 2>&1 \
-        && ok "Python package: matplotlib" || fail "Python package not installed: matplotlib"
+    for package in matplotlib numpy; do
+        python3 -c "import ${package}" >/dev/null 2>&1 \
+            && ok "Python package: ${package}" || fail "Python package not installed: ${package}"
+    done
 fi
 
 if [[ "${RUN_PEAK_ANNOTATION:-false}" == "true" ]]; then
@@ -84,11 +97,98 @@ PY
     else
         ok "biological samples: $BIOLOGICAL_SAMPLE_COUNT"
     fi
+
+    DIFFBIND_SUMMITS_VALUE="${DIFFBIND_SUMMITS:-100}"
+    if [[ "$DIFFBIND_SUMMITS_VALUE" =~ ^[0-9]+$ ]]; then
+        ok "DiffBind summit half-width: ${DIFFBIND_SUMMITS_VALUE} bp"
+    else
+        fail "DIFFBIND_SUMMITS must be a non-negative integer"
+    fi
+
+    if [[ "${RUN_DESEQ2ATAC:-true}" == "true" ]]; then
+        DESEQ2ATAC_MIN_VALUE="${DESEQ2ATAC_MIN_SAMPLES:-2}"
+        if [[ "$DESEQ2ATAC_MIN_VALUE" =~ ^[1-9][0-9]*$ ]] && \
+           (( DESEQ2ATAC_MIN_VALUE <= BIOLOGICAL_SAMPLE_COUNT )); then
+            ok "DESeq2ATAC minimum broad/narrow peak support: ${DESEQ2ATAC_MIN_VALUE}"
+        else
+            fail "DESEQ2ATAC_MIN_SAMPLES must be positive and no greater than biological sample count"
+        fi
+        if awk -v value="${DESEQ2ATAC_ALPHA:-0.05}" \
+            'BEGIN{exit !(value ~ /^([0-9]+([.][0-9]*)?|[.][0-9]+)$/ && value > 0 && value < 1)}'; then
+            ok "DESeq2ATAC FDR alpha: ${DESEQ2ATAC_ALPHA:-0.05}"
+        else
+            fail "DESEQ2ATAC_ALPHA must be numeric and between zero and one"
+        fi
+        if python3 - "$SAMPLESHEET" <<'PY'
+import csv, sys
+bad = []
+seen = set()
+with open(sys.argv[1], newline="") as handle:
+    for row in csv.DictReader(handle):
+        if row["is_control"].strip().lower() in {"true", "1", "yes"}:
+            continue
+        key = (row["sample_id"].strip(), row["replicate"].strip())
+        if key in seen:
+            continue
+        seen.add(key)
+        if row["macs2_mode"].strip().lower() != "both":
+            bad.append("_bioR".join(key))
+if bad:
+    print("DESeq2ATAC broad+narrow analyses require macs2_mode=both for: " + ", ".join(bad), file=sys.stderr)
+    raise SystemExit(1)
+PY
+        then
+            ok "DESeq2ATAC broad and narrow peaks requested for every biological sample"
+        else
+            fail "DESeq2ATAC requires macs2_mode=both"
+        fi
+        if [[ -n "${DESEQ2ATAC_BLOCK_COLUMN:-}" ]]; then
+            if python3 - "$SAMPLESHEET" "${DESEQ2ATAC_BLOCK_COLUMN}" <<'PY'
+import csv, sys
+with open(sys.argv[1], newline="") as handle:
+    fields = csv.DictReader(handle).fieldnames or []
+raise SystemExit(0 if sys.argv[2] in fields else 1)
+PY
+            then
+                ok "DESeq2ATAC block column: ${DESEQ2ATAC_BLOCK_COLUMN}"
+            else
+                fail "DESeq2ATAC block column is absent: ${DESEQ2ATAC_BLOCK_COLUMN}"
+            fi
+        else
+            ok "DESeq2ATAC design: ~ condition"
+        fi
+    fi
+
+    mapfile -t RUN_LAYOUTS < <(python3 - "$SAMPLESHEET" <<'PY'
+import csv, sys
+with open(sys.argv[1], newline="") as handle:
+    rows = csv.DictReader(handle)
+    print("\n".join(sorted({r["layout"].strip().upper() for r in rows})))
+PY
+    )
+    if (( ${#RUN_LAYOUTS[@]} > 1 )); then
+        fail "mixed PE/SE run (${RUN_LAYOUTS[*]}); use separate samplesheets and output directories"
+    elif (( ${#RUN_LAYOUTS[@]} == 1 )); then
+        ok "run layout: ${RUN_LAYOUTS[0]}"
+    fi
+fi
+
+SE_MODE="${SE_SIGNAL_MODE:-read}"
+if [[ "${SE_MODE,,}" == "read" ]]; then
+    ok "single-end signal mode: read"
+else
+    fail "unsupported SE_SIGNAL_MODE=${SE_MODE}; v3.2.0 supports read only"
+fi
+
+if [[ "${TRACK_STANDARD_CHROMS_ONLY:-true}" == "true" ]]; then
+    ok "canonical chromosome universe enabled"
+else
+    fail "TRACK_STANDARD_CHROMS_ONLY must be true for unified track normalization"
 fi
 
 MACS3_COMMAND="${MACS3_COMMAND:-macs3}"
 for tool in bowtie2 samtools bedtools trim_galore fastqc "$MACS3_COMMAND" \
-    multiqc python3 "${R_BIN:-Rscript}" bamCoverage multiBamSummary; do
+    multiqc python3 "${R_BIN:-Rscript}" bamCoverage multiBamSummary gzip; do
     command -v "$tool" >/dev/null 2>&1 && ok "tool: $tool" || fail "tool not in PATH: $tool"
 done
 
@@ -145,7 +245,7 @@ for genome in "${USED_GENOMES[@]:-}"; do
     fi
 done
 
-for package in DESeq2 DiffBind ggplot2; do
+for package in DESeq2 DiffBind ggplot2 dplyr rtracklayer GenomicAlignments GenomicRanges Rsamtools BiocParallel; do
     if "${R_BIN:-Rscript}" -e "quit(status=ifelse(requireNamespace('${package}', quietly=TRUE), 0, 1))" >/dev/null 2>&1; then
         ok "R package: $package"
     else

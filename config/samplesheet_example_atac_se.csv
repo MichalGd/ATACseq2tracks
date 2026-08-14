@@ -1,0 +1,5 @@
+sample_id,fastq_1,fastq_2,layout,genome,assay,factor,condition,treatment,cell_type,replicate,tech_replicate,is_control,control_id,macs2_mode,blacklist,output_prefix
+ATAC_SE_WT_R1,/data/fastq/ATAC_SE_WT_R1.fastq.gz,,SE,hg38,ATAC-seq,accessibility,WT,none,cell_type,1,1,FALSE,,both,/references/hg38/hg38.blacklist.bed,ATAC_SE_WT_R1
+ATAC_SE_WT_R2,/data/fastq/ATAC_SE_WT_R2.fastq.gz,,SE,hg38,ATAC-seq,accessibility,WT,none,cell_type,2,1,FALSE,,both,/references/hg38/hg38.blacklist.bed,ATAC_SE_WT_R2
+ATAC_SE_KO_R1,/data/fastq/ATAC_SE_KO_R1.fastq.gz,,SE,hg38,ATAC-seq,accessibility,KO,none,cell_type,1,1,FALSE,,both,/references/hg38/hg38.blacklist.bed,ATAC_SE_KO_R1
+ATAC_SE_KO_R2,/data/fastq/ATAC_SE_KO_R2.fastq.gz,,SE,hg38,ATAC-seq,accessibility,KO,none,cell_type,2,1,FALSE,,both,/references/hg38/hg38.blacklist.bed,ATAC_SE_KO_R2

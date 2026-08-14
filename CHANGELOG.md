@@ -1,5 +1,92 @@
 # Changelog
 
+## v3.2.0 differential-accessibility update - 2026-08-13
+
+- Change the DiffBind ATAC default to configurable `summits=100` while allowing
+  `DIFFBIND_SUMMITS=200` to reproduce the previous window width.
+- Add DESeq2ATAC as an independent DESeq2 analysis peer and extend it to run
+  separate broad- and narrow-peak consensus analyses.
+- Require configurable biological-sample support (default two), canonical
+  chromosomes and blacklist exclusion in the DESeq2ATAC region universe.
+- Count strict PE proper-pair fragments once or SE alignments once with
+  `GenomicAlignments::summarizeOverlaps()`; no HTSeq dependency is added.
+- Export compressed raw/normalized matrices and complete/FDR result tables,
+  sample and library metadata, size factors, session information and PNG/PDF QC.
+- Store broad and narrow outputs independently and add a peak-type comparison
+  summary; document the exact support-filtered consensus construction and its
+  difference from DiffBind summit recentering.
+- Add a separate `step12a.done` checkpoint and attempt both differential modules
+  before propagating either module's failure.
+- Add focused static/self-tests, final-report integration and a legacy-method
+  audit documenting deliberate modernizations and excluded study-specific code.
+
+## v3.2.0 track-normalization update — 2026-08-06
+
+- Replace the legacy `_RPM.bw` contract with fragment/read CPM `*_CPM.bw`; no CPM bedGraph is emitted.
+- Generate reciprocal-DESeq2-consensus and DESeq2-robust-CPM coverage as both bigWig and bedGraph.
+- Match `DESeq2::fpm(robust=TRUE)` through the consensus cohort's geometric mean of count-matrix column sums.
+- Count paired-end fragments once and retain read-based semantics for single-end inputs.
+- Use the same canonical autosome/X/Y universe for consensus construction, consensus counting and every track.
+- Export per-sample normalization counts, factors, cohort constants and applied scales.
+- Add focused normalization/output-contract tests while preserving the existing checkpoint architecture.
+
+### Explicit single-end variant — 2026-08-06
+
+- Add `SE_SIGNAL_MODE="read"` as the explicit supported SE normalization mode.
+- Use each filtered SE alignment once, without artificial read extension, for coverage, CPM denominators and consensus-peak counts.
+- Reject mixed PE/SE samplesheets so fragment- and read-based units cannot enter one normalization cohort.
+- Add an SE ATAC-seq samplesheet example plus mocked SE execution and validation tests.
+- Keep MACS3 SE shift/extension limited to peak calling; Tn5 insertion-site tracks remain outside this update.
+
+Deployment and resume instructions are in
+`docs/v3.2.0_TRACK_NORMALIZATION_UPDATE_2026-08-06.md`.
+
+## v3.2.0 test-run hotfix — 2026-08-04
+
+The public version remains **3.2.0** while the first complete server run is
+used to find and correct integration defects. This deliberately does not open
+v3.2.1 yet.
+
+- Read the DESeq2 consensus `size_factor` by its TSV header instead of the
+  former positional field, which incorrectly returned the genome (`mm39`).
+- Read Picard `PERCENT_DUPLICATION` by its tab-delimited header instead of a
+  whitespace-shifted field that was actually the estimated library size.
+- Include `logs/picard/` in the dedicated Step 5 MultiQC input paths.
+- Ensure BAM indexes exist before `idxstats`, and validate the BAM, scaling
+  factor, chromosome selection, `bamCoverage` exit status, and bigWig output.
+- Interpret broadPeak files as generic `bed` input for DiffBind; `broad` is not
+  a supported DiffBind peak-caller identifier.
+- Skip a header-only narrow or broad DiffBind companion sheet, while still
+  failing if no runnable differential analysis exists.
+- Require exactly two conditions with at least two biological replicates per
+  condition for this v3.2.0 differential-analysis path.
+- Use all normalized sites for DiffBind PCA and heatmap QC so those plots are
+  not contingent on finding an FDR-significant site.
+- Export both all tested DiffBind sites and the FDR 0.05 subset, and explicitly
+  print lattice/ggplot objects into their PNG devices.
+- Extend preflight checks to the Python and R packages used downstream.
+- Add regression fixtures for both header-aware metric parsers.
+
+Deployment and resume instructions are in
+`docs/v3.2.0_TEST_RUN_HOTFIX_2026-08-04.md`.
+
+### Windows-input safety follow-up — 2026-08-04
+
+- Detect CRLF, bare CR, UTF-8/UTF-16/UTF-32 BOM encodings and a trailing DOS
+  Ctrl-Z marker before sourcing the configuration or parsing the samplesheet.
+- Create a timestamped, byte-for-byte backup beside every affected input before
+  modifying it.
+- Atomically replace affected inputs with UTF-8/LF text and use those corrected
+  files for the current run.
+- Leave clean UTF-8/LF files unchanged and create no unnecessary backup.
+- Reject unknown encodings without modifying or backing up the input.
+- Add regression coverage for conversion, backup integrity and idempotence.
+
+Deployment instructions are in
+`docs/v3.2.0_WINDOWS_INPUT_HOTFIX_2026-08-04.md`.
+
+---
+
 ## v3.2.0 — 2026-08-02 (release candidate)
 
 ### Scientific and output changes

@@ -94,6 +94,13 @@ To rerun multiple steps:
 rm /path/to/my_project/analysis/.checkpoints/step{6,7,8,9,10,11}.done
 ```
 
+DiffBind and DESeq2ATAC resume independently:
+
+```bash
+rm /path/to/my_project/analysis/.checkpoints/step12.done   # DiffBind only
+rm /path/to/my_project/analysis/.checkpoints/step12a.done  # DESeq2ATAC only
+```
+
 To rerun everything from scratch:
 ```bash
 rm -rf /path/to/my_project/analysis/.checkpoints/
@@ -114,6 +121,24 @@ nohup bash ATACseq2tracks/atacseq2tracks.sh \
     --config /path/to/project_B/config/config.conf \
     > /path/to/project_B/run.log 2>&1 &
 ```
+
+---
+
+## Running paired-end and single-end projects
+
+The same workflow installation handles both layouts, but they are separate analyses. Use one samplesheet, configuration and output directory for PE, and another set for SE:
+
+```bash
+# Paired-end project
+bash ATACseq2tracks/atacseq2tracks.sh \
+  --config /path/to/project_PE/config/config.conf
+
+# Single-end project; config contains SE_SIGNAL_MODE="read"
+bash ATACseq2tracks/atacseq2tracks.sh \
+  --config /path/to/project_SE/config/config.conf
+```
+
+For SE rows, set `layout=SE` and leave `fastq_2` empty. Each filtered SE alignment is counted once for CPM, consensus-peak counts and DESeq2 factors. Do not merge PE and SE outputs into one DESeq2 normalization cohort.
 
 ---
 

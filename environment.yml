@@ -40,6 +40,8 @@ dependencies:
   - bioconductor-diffbind
   - bioconductor-biocparallel
   - bioconductor-genomicalignments
+  - bioconductor-genomicranges
+  - bioconductor-rsamtools
   - bioconductor-rtracklayer
 
   # ── R packages ───────────────────────────────────────────────────────────

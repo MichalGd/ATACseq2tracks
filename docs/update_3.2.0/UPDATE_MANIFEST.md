@@ -69,3 +69,20 @@ The historical PowerPoint presentation is retained only for repository history. 
 ## Application policy
 
 Do not overwrite an active project-specific `config.conf`. Merge the new variables into it, verify every reference/software path, create the Conda environment, run static checks, and complete the acceptance test in `APPLY_UPDATE.md` before merging or tagging the release.
+
+## Differential-accessibility addendum (2026-08-13)
+
+The cumulative v3.2.0 snapshot now also adds:
+
+- `scripts/deseq2atac_analysis.sh`
+- `scripts/deseq2atac_analysis.R`
+- `tests/test_differential_accessibility.sh`
+- `docs/15_deseq2atac_legacy_method_review.md`
+
+It updates both entry points, DiffBind scripts, configuration templates,
+preflight, final reporting, environment declarations, example samplesheets,
+the regression harness and differential-accessibility documentation. Existing
+project configurations must merge the new `DIFFBIND_SUMMITS` and `DESEQ2ATAC_*`
+settings rather than being overwritten. Existing samplesheets must request
+`macs2_mode=both` when DESeq2ATAC is enabled so both its broad and narrow
+analyses have peak inputs.
