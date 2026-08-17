@@ -33,23 +33,42 @@ ATACseq2tracks 3.2.0 is a modular, checkpoint-resumable Bash workflow for bulk A
 
 ```mermaid
 flowchart TD
-    A[FASTQ + samplesheet + config] --> B[0 preflight]
-    B --> C[1-3 raw QC, trimming, trimmed QC]
-    C --> D[4 Bowtie2 alignment]
-    D --> E[5 duplicate removal]
-    E --> F[6 MAPQ, flag, mitochondrial and blacklist filtering]
-    F --> G[7-8 CPM tracks and group tracks]
-    F --> H[9 layout-aware MACS3]
-    G --> I[10 deepTools QC]
-    H --> I
-    I --> J[Consensus peaks and DESeq2 track scaling]
-    I --> K[ATAC TSS and fragment periodicity QC]
-    J --> L[11-12 DiffBind preparation and analysis]
-    J --> O[12a DESeq2ATAC broad/narrow analyses]
-    L --> M[13 UCSC definitions]
-    O --> M
-    M --> N[14 report]
+    A[FASTQ files + samplesheet + config] --> B[0 Preflight validation]
+    B --> C[1 Raw FastQC + MultiQC]
+    C --> D[2 Trim Galore]
+    D --> E[3 Trimmed FastQC + MultiQC]
+    E --> F[4 Bowtie2 alignment]
+    F --> G[5 Picard duplicate removal]
+    G --> H[6 MAPQ, flag, mitochondrial and blacklist filtering]
+
+    H --> I[7 Per-sample CPM bigWigs]
+    H --> J[8 Replicate merging + merged CPM bigWigs]
+    H --> K[9 MACS3 narrow and broad peaks]
+    H --> L[10 Post-alignment and ATAC-specific QC]
+    I --> L
+    K --> L
+    L --> M[Consensus peaks + DESeq2-scaled tracks]
+
+    K --> N[11 DiffBind samplesheets]
+    N --> O[12 DiffBind analysis]
+    H --> P[12a DESeq2ATAC broad and narrow analyses]
+    K --> P
+
+    I --> Q[13 UCSC track definitions]
+    J --> Q
+    M --> Q
+    L --> R[14 HTML pipeline report]
+    O --> R
+    P --> R
+    Q --> R
+    R --> S{Automatic cleanup enabled?}
+    S -->|No, default| T[Retain intermediates]
+    S -->|Yes| U[Remove only selected intermediates]
 ```
+
+DiffBind and DESeq2ATAC are separate differential-accessibility analyses.
+Normalized browser tracks are visualization outputs and are not used as count
+input for either module. Each numbered stage has an independent checkpoint.
 
 ## Design principles
 

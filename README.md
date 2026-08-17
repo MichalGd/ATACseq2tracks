@@ -25,6 +25,48 @@ ATACseq2tracks is a samplesheet-driven Bash workflow for bulk ATAC-seq and relat
 - UCSC custom-track definitions;
 - optional HOMER peak annotation and motif enrichment, disabled by default.
 
+## Workflow overview
+
+```mermaid
+flowchart TD
+    A[FASTQ files + samplesheet + config] --> B[0 Preflight validation]
+    B --> C[1 Raw FastQC + MultiQC]
+    C --> D[2 Trim Galore]
+    D --> E[3 Trimmed FastQC + MultiQC]
+    E --> F[4 Bowtie2 alignment]
+    F --> G[5 Picard duplicate removal]
+    G --> H[6 MAPQ, flag, mitochondrial and blacklist filtering]
+
+    H --> I[7 Per-sample CPM bigWigs]
+    H --> J[8 Replicate merging + merged CPM bigWigs]
+    H --> K[9 MACS3 narrow and broad peaks]
+    H --> L[10 Post-alignment and ATAC-specific QC]
+    I --> L
+    K --> L
+    L --> M[Consensus peaks + DESeq2-scaled tracks]
+
+    K --> N[11 DiffBind samplesheets]
+    N --> O[12 DiffBind analysis]
+    H --> P[12a DESeq2ATAC broad and narrow analyses]
+    K --> P
+
+    I --> Q[13 UCSC track definitions]
+    J --> Q
+    M --> Q
+    L --> R[14 HTML pipeline report]
+    O --> R
+    P --> R
+    Q --> R
+    R --> S{Automatic cleanup enabled?}
+    S -->|No, default| T[Retain intermediates]
+    S -->|Yes| U[Remove only selected intermediates]
+```
+
+Steps are checkpointed and resume independently. DiffBind and DESeq2ATAC are
+separate differential-accessibility analyses; normalized browser tracks are not
+used as count input for either module. See [Pipeline stages](docs/06_pipeline_steps.md)
+for the commands and files used at each stage.
+
 ## Important scientific definitions
 
 ### Consensus peaks
@@ -78,6 +120,37 @@ ATACseq2tracks/
     ├── README.md                  documentation index
     └── update_3.2.0/              update rationale, manifest and application guide
 ```
+
+## Quick start
+
+```bash
+git clone https://github.com/MichalGd/ATACseq2tracks.git
+cd ATACseq2tracks
+mamba env create -f environment.yml
+conda activate ATACseq2tracks
+
+mkdir -p /path/to/project/config
+cp config/config.conf /path/to/project/config/config.conf
+cp config/samplesheet_example_atac.csv /path/to/project/config/samplesheet.csv
+```
+
+Edit both copied files, then validate the complete run configuration before
+starting the workflow:
+
+```bash
+bash scripts/smoke_test.sh \
+    /path/to/project/config/samplesheet.csv \
+    /path/to/project/config/config.conf
+
+bash atacseq2tracks.sh \
+    --config /path/to/project/config/config.conf
+```
+
+Use `samplesheet_example_atac_se.csv` for a single-end run. PE and SE libraries,
+and hg38 and mm39 libraries, must be submitted as separate runs. For background
+execution, monitoring and recovery commands, follow the
+[Quick start](docs/02_quickstart.md) and [Running and resume](docs/05_running.md)
+guides.
 
 ## Installation
 
@@ -243,12 +316,19 @@ Then execute small PE-only and SE-only datasets with at least two biological sam
 
 ## Documentation
 
-- [Documentation index](docs/README.md)
-- [3.2.0 update scope](docs/update_3.2.0/MINIMAL_CRITICAL_IMPROVEMENTS.md)
-- [Application and acceptance checks](docs/update_3.2.0/APPLY_UPDATE.md)
-- [Update manifest](docs/update_3.2.0/UPDATE_MANIFEST.md)
-- [Post-alignment QC](docs/12_post_alignment_qc.md)
-- [Differential accessibility](docs/13_differential_accessibility.md)
+| If you need to... | Read... |
+|---|---|
+| Install and launch a first run | [Quick start](docs/02_quickstart.md) and [Installation](docs/03_installation.md) |
+| Prepare the samplesheet and configuration | [Inputs](docs/04_inputs.md) and [Reference files](docs/10_reference_files.md) |
+| Run, monitor, resume or rerun a stage | [Running and resume](docs/05_running.md) |
+| Understand each processing stage | [Pipeline stages](docs/06_pipeline_steps.md) |
+| Find and interpret generated files | [Outputs](docs/07_outputs.md) |
+| Review QC metrics | [Post-alignment QC](docs/12_post_alignment_qc.md) |
+| Design or interpret differential analysis | [Differential accessibility](docs/13_differential_accessibility.md) and [Replicates and design](docs/14_replicates_and_experimental_design.md) |
+| Diagnose a failure | [Troubleshooting](docs/09_troubleshooting.md) |
+| Review the v3.2.0 update | [Scope](docs/update_3.2.0/MINIMAL_CRITICAL_IMPROVEMENTS.md), [application checks](docs/update_3.2.0/APPLY_UPDATE.md) and [manifest](docs/update_3.2.0/UPDATE_MANIFEST.md) |
+
+The complete page list is in the [documentation index](docs/README.md).
 
 ## Known limitations
 
