@@ -16,6 +16,8 @@ ATACseq2tracks 3.2.0 is a modular, checkpoint-resumable Bash workflow for bulk A
 - consensus-peak raw counts and DESeq2 size factors;
 - DiffBind differential accessibility results and diagnostic figures;
 - independent broad- and narrow-consensus DESeq2ATAC results and PNG/PDF diagnostics;
+- all eligible condition pairs, concise differential summaries, and built-in
+  GTF/default cCRE peak annotation;
 - UCSC custom-track definitions and a MultiQC report.
 
 ## Supported inputs
@@ -50,16 +52,17 @@ flowchart TD
     L --> M[Consensus peaks + DESeq2-scaled tracks]
 
     K --> N[11 DiffBind samplesheets]
-    N --> O[12 DiffBind analysis]
-    H --> P[12a DESeq2ATAC broad and narrow analyses]
+    N --> O[12 DiffBind broad/narrow all eligible condition pairs]
+    H --> P[12a DESeq2ATAC broad/narrow all eligible condition pairs]
     K --> P
+    O --> V[GTF and default cCRE annotation]
+    P --> V
 
     I --> Q[13 UCSC track definitions]
     J --> Q
     M --> Q
     L --> R[14 HTML pipeline report]
-    O --> R
-    P --> R
+    V --> R
     Q --> R
     R --> S{Automatic cleanup enabled?}
     S -->|No, default| T[Retain intermediates]
@@ -82,7 +85,7 @@ input for either module. Each numbered stage has an independent checkpoint.
 | Layout-specific cohorts | A run contains PE or SE libraries, not both; this avoids combining fragment and read units in one DESeq2 cohort |
 | Replicate-aware consensus | Support is counted across distinct biological sample keys |
 | Auditable filtering | Per-sample attrition metrics accompany filtered BAMs |
-| Storage safety | Automatic cleanup is disabled until explicitly enabled after successful analysis |
+| Storage safety | Cleanup runs by default only after full success; filtered BAMs and final outputs are retained, and one switch disables cleanup |
 
 ## Limitations
 

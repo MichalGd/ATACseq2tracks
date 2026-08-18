@@ -21,6 +21,7 @@ Current prepared version: **3.2.0 release candidate**.
 | [v3.2.0 track-normalization update](v3.2.0_TRACK_NORMALIZATION_UPDATE_2026-08-06.md) | PE fragment and SE read semantics, output contract, validation and resume instructions |
 | [DESeq2ATAC legacy-method review](15_deseq2atac_legacy_method_review.md) | Legacy script audit, retained behavior, modernizations and limitations |
 | [v3.2.0 DiffBind/DESeq2ATAC update](v3.2.0_DESEQ2ATAC_UPDATE_2026-08-13.md) | Configuration, deployment, checkpoints, validation and affected files |
+| [v3.2.0 universal differential/annotation update](v3.2.0_UNIVERSAL_DIFFERENTIAL_ANNOTATION_UPDATE_2026-08-18.md) | Any-number condition pairs, singleton policy, pair summaries and GTF/cCRE annotation |
 | [3.2.0 manifest](update_3.2.0/UPDATE_MANIFEST.md) | Baseline, changed/new files and removals |
 | [3.2.0 application guide](update_3.2.0/APPLY_UPDATE.md) | Safe update and acceptance testing |
 | [3.2.0 critical scope](update_3.2.0/MINIMAL_CRITICAL_IMPROVEMENTS.md) | Scientific decisions and remaining limitations |

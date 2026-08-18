@@ -23,6 +23,15 @@ command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 is required to vali
 python3 "$INPUT_SANITIZER" "$CONFIG"
 # shellcheck disable=SC1090
 source "$CONFIG"
+case "${RUN_CCRE_ANNOTATION:-true}" in
+    true|false) ;;
+    *) fail "RUN_CCRE_ANNOTATION must be true or false" ;;
+esac
+case "${ENABLE_AUTOMATIC_CLEANUP:-true}" in
+    true) ok "automatic cleanup enabled after full success" ;;
+    false) ok "automatic cleanup disabled; all intermediates will be retained" ;;
+    *) fail "ENABLE_AUTOMATIC_CLEANUP must be true or false" ;;
+esac
 SAMPLESHEET="$SAMPLESHEET_ARG"
 [[ -f "$SAMPLESHEET" ]] || { echo "ERROR: samplesheet not found: $SAMPLESHEET" >&2; exit 1; }
 python3 "$INPUT_SANITIZER" "$SAMPLESHEET"
@@ -40,7 +49,8 @@ for script in validate_samplesheet.py sanitize_text_inputs.py fastqc_batch.sh tr
     prepare_tss_bed.py extract_ataqv_metrics.py plot_fragment_periodicity.py \
     plot_chrom_coverage.py peak_interpretation.sh prepare_diffbind.R \
     diffbind_analysis.sh diffbind_analysis.R deseq2atac_analysis.sh \
-    deseq2atac_analysis.R generate_pipeline_report.sh; do
+    deseq2atac_analysis.R peak_annotation_helpers.R \
+    summarize_differential_accessibility.py generate_pipeline_report.sh; do
     [[ -f "${SCRIPT_DIR}/${script}" ]] && ok "script: ${script}" || fail "missing script: ${script}"
 done
 
@@ -103,6 +113,45 @@ PY
         ok "DiffBind summit half-width: ${DIFFBIND_SUMMITS_VALUE} bp"
     else
         fail "DIFFBIND_SUMMITS must be a non-negative integer"
+    fi
+    if awk -v value="${DIFFBIND_ALPHA:-0.05}" \
+        'BEGIN{exit !(value ~ /^([0-9]+([.][0-9]*)?|[.][0-9]+)$/ && value > 0 && value < 1)}'; then
+        ok "DiffBind FDR alpha: ${DIFFBIND_ALPHA:-0.05}"
+    else
+        fail "DIFFBIND_ALPHA must be numeric and between zero and one"
+    fi
+    if awk -v value="${DIFFERENTIAL_MIN_ABS_LOG2FC:-0}" \
+        'BEGIN{exit !(value ~ /^([0-9]+([.][0-9]*)?|[.][0-9]+)$/ && value >= 0)}'; then
+        ok "differential minimum absolute log2 fold change: ${DIFFERENTIAL_MIN_ABS_LOG2FC:-0}"
+    else
+        fail "DIFFERENTIAL_MIN_ABS_LOG2FC must be a non-negative number"
+    fi
+    if python3 - "$SAMPLESHEET" "${DIFFERENTIAL_CONDITION_ORDER:-}" <<'PY'
+import csv, sys
+with open(sys.argv[1], newline="") as handle:
+    observed = []
+    seen_samples = set()
+    for row in csv.DictReader(handle):
+        if row["is_control"].strip().lower() in {"true", "1", "yes"}:
+            continue
+        key = (row["sample_id"].strip(), row["replicate"].strip())
+        if key in seen_samples:
+            continue
+        seen_samples.add(key)
+        condition = row["condition"].strip()
+        if condition not in observed:
+            observed.append(condition)
+requested = [value.strip() for value in sys.argv[2].split(",") if value.strip()]
+if len(requested) != len(set(requested)):
+    raise SystemExit("DIFFERENTIAL_CONDITION_ORDER contains duplicate names")
+unknown = [value for value in requested if value not in observed]
+if unknown:
+    raise SystemExit("Unknown condition(s) in DIFFERENTIAL_CONDITION_ORDER: " + ", ".join(unknown))
+PY
+    then
+        ok "universal differential condition order"
+    else
+        fail "invalid DIFFERENTIAL_CONDITION_ORDER"
     fi
 
     if [[ "${RUN_DESEQ2ATAC:-true}" == "true" ]]; then
@@ -209,6 +258,44 @@ check_reference() {
     [[ -f "$path" ]] && ok "$label: $path" || fail "$label not found: $path"
 }
 
+check_ccre_reference() {
+    local label="$1" path="$2" source="$3"
+    if [[ -z "$path" ]]; then
+        fail "$label is empty while RUN_CCRE_ANNOTATION=true"
+        return
+    fi
+    if [[ ! -s "$path" ]]; then
+        fail "$label not found or empty: $path"
+        return
+    fi
+    if [[ "$path" == *.gz ]] && ! gzip -t "$path"; then
+        fail "$label is not a readable gzip file: $path"
+        return
+    fi
+    if python3 - "$path" <<'PY'
+import gzip, sys
+opener = gzip.open if sys.argv[1].lower().endswith(".gz") else open
+valid = False
+with opener(sys.argv[1], "rt", errors="replace") as handle:
+    for line in handle:
+        if not line.strip() or line.startswith("#"):
+            continue
+        fields = line.rstrip("\n").split("\t")
+        try:
+            valid = len(fields) >= 3 and int(fields[1]) >= 0 and int(fields[2]) > int(fields[1])
+        except ValueError:
+            valid = False
+        if valid:
+            break
+raise SystemExit(0 if valid else 1)
+PY
+    then
+        ok "$label: $path ($source)"
+    else
+        fail "$label has no valid BED interval: $path"
+    fi
+}
+
 for genome in "${USED_GENOMES[@]:-}"; do
     case "$genome" in
         hg38)
@@ -221,6 +308,15 @@ for genome in "${USED_GENOMES[@]:-}"; do
                     check_reference GTF_HUMAN "${GTF_HUMAN:-}"
                 fi
             fi
+            if [[ "${RUN_SIMPLE_PEAK_ANNOTATION:-true}" == "true" ]]; then
+                check_reference GTF_HUMAN "${GTF_HUMAN:-}"
+                if [[ "${RUN_CCRE_ANNOTATION:-true}" == "true" ]]; then
+                    check_ccre_reference CCRE_BED_HG38 "${CCRE_BED_HG38:-}" \
+                        "${CCRE_SOURCE_HG38:-ENCODE4_GRCh38}"
+                else
+                    ok "cCRE annotation disabled; using GTF-only annotation"
+                fi
+            fi
             index="${INDEX_HG38:-}"
             ;;
         mm39)
@@ -231,6 +327,15 @@ for genome in "${USED_GENOMES[@]:-}"; do
                     check_reference TSS_BED_MM39 "$TSS_BED_MM39"
                 else
                     check_reference GTF_MOUSE "${GTF_MOUSE:-}"
+                fi
+            fi
+            if [[ "${RUN_SIMPLE_PEAK_ANNOTATION:-true}" == "true" ]]; then
+                check_reference GTF_MOUSE "${GTF_MOUSE:-}"
+                if [[ "${RUN_CCRE_ANNOTATION:-true}" == "true" ]]; then
+                    check_ccre_reference CCRE_BED_MM39 "${CCRE_BED_MM39:-}" \
+                        "${CCRE_SOURCE_MM39:-ENCODE3_mm10_liftOver_mm39}"
+                else
+                    ok "cCRE annotation disabled; using GTF-only annotation"
                 fi
             fi
             index="${INDEX_MM39:-}"

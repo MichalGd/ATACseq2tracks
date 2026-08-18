@@ -1,5 +1,28 @@
 # Changelog
 
+## v3.2.0 universal differential/annotation update - 2026-08-18
+
+- Support any number and names of conditions and export all pairwise contrasts
+  among conditions with at least two biological samples.
+- Use all non-control biological samples for broad/narrow consensus construction
+  and descriptive raw counts; exclude singleton conditions only from models.
+- Fit one multi-condition model per method and peak type rather than refitting
+  each pair independently.
+- Add pair-level status and tested/significant/increased/decreased summaries in
+  TSV and HTML, with explicit numerator/reference direction.
+- Isolate broad/narrow failures, generate reports before propagating failures,
+  and suppress automatic cleanup after differential-analysis failure.
+- Add built-in GTF promoter/exon/intron/gene-body/nearest-TSS annotation and
+  default-required genome-matched cCRE annotation for shared universes and
+  results, with an explicit GTF-only opt-out.
+- Add `utilities/prepare_encode4_hg38_ccre.sh` to download, strictly validate
+  and record provenance for the native-GRCh38 expanded ENCODE4 registry.
+- Enable the existing post-success intermediate cleanup policy by default;
+  `ENABLE_AUTOMATIC_CLEANUP=false` remains the explicit opt-out and filtered
+  quantitative BAMs remain retained.
+- Retain two-condition root-level result names where practical and leave all
+  upstream processing, track normalization and checkpoint architecture intact.
+
 ## v3.2.0 differential-accessibility update - 2026-08-13
 
 - Change the DiffBind ATAC default to configurable `summits=100` while allowing

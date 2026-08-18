@@ -57,6 +57,79 @@ gunzip /path/to/ref/blacklist_mm39.bed.gz
 
 ---
 
+## GTF and cCRE annotations
+
+The built-in simple peak annotation requires the matching hg38 or mm39 GTF.
+cCRE classification is enabled by default with `RUN_CCRE_ANNOTATION=true`, so
+the selected genome's cCRE BED must exist and pass preflight. A server without
+this reference can explicitly set `RUN_CCRE_ANNOTATION=false` for GTF-only
+annotation.
+
+For human hg38, use the native GRCh38 ENCODE4 expanded Registry of cCREs. The
+stable comprehensive BED is available from the
+[ENCODE cCRE supplementary-data directory](https://users.moore-lab.org/ENCODE-cCREs/Supplementary-Data/)
+as `Supplementary-Data-1.GRCh38-cCREs-V4.bed.gz`; the current registry is also
+described on the [SCREEN downloads page](https://screen.wenglab.org/downloads).
+Reference: Moore JE, Pratt HE, Fan K, et al.,
+["An expanded registry of candidate cis-regulatory elements"](https://www.nature.com/articles/s41586-025-09909-9),
+*Nature* (2026), DOI `10.1038/s41586-025-09909-9`.
+
+The repository includes a preparation utility analogous to the historical
+mouse cCRE utility, but no liftOver is performed because this source is already
+native GRCh38:
+
+```bash
+cd /home/micgdu/Analysis/workflows/ATACseq2tracks
+bash utilities/prepare_encode4_hg38_ccre.sh
+```
+
+It downloads the official compressed six-column BED, requires the published
+2,348,854 records, validates canonical chromosomes, coordinates, accessions and
+cCRE classes, verifies gzip/checksum integrity, installs the file atomically,
+and writes a provenance TSV. Its default output exactly matches the configured
+path:
+
+```text
+/home/micgdu/Analysis/utilities/UCSC/CREs/human/hg38/Supplementary-Data-1.GRCh38-cCREs-V4.bed.gz
+```
+
+On another server, choose the destination explicitly:
+
+```bash
+bash utilities/prepare_encode4_hg38_ccre.sh \
+  --output-dir /shared/references/hg38/ccre
+```
+
+Then set `CCRE_BED_HG38` to the reported BED path. Existing files are validated
+and retained; use `--force` only to deliberately redownload and replace one.
+The installed columns are `chrom`, `chromStart`, `chromEnd`, two ENCODE
+accessions, and cCRE class. This is directly compatible with
+`peak_annotation_helpers.R`, which uses the first accession as the element ID
+and the sixth column for classes such as PLS, pELS and dELS.
+
+For mouse mm39, reproduce the existing
+[ATAC-seq utility](https://github.com/MichalGd/ATAC-seq/blob/main/utilitiies/creating_ENCODE_cCRES_mm39_bigBed_track.sh):
+download ENCODE3 `encodeCcreCombined.bb` for mm10, convert to BED, and lift it
+to mm39. The expected server BED is:
+
+```text
+/home/micgdu/Analysis/utilities/UCSC/CREs/mouse/mm39/encodeCcreCombined_mm39_sorted.bed
+```
+
+Record this as `ENCODE3_mm10_liftOver_mm39`, not as native mm39 ENCODE4. Human
+and mouse class totals are not directly comparable because the registry versions
+and coordinate-generation methods differ.
+
+```bash
+RUN_CCRE_ANNOTATION=true
+CCRE_BED_HG38="/home/micgdu/Analysis/utilities/UCSC/CREs/human/hg38/Supplementary-Data-1.GRCh38-cCREs-V4.bed.gz"
+CCRE_SOURCE_HG38="ENCODE4_GRCh38_2026"
+CCRE_BED_MM39="/home/micgdu/Analysis/utilities/UCSC/CREs/mouse/mm39/encodeCcreCombined_mm39_sorted.bed"
+CCRE_SOURCE_MM39="ENCODE3_mm10_liftOver_mm39"
+```
+
+---
+
 ## Summary: required config.conf variables
 
 ```bash
@@ -72,11 +145,17 @@ CHROM_SIZES_MOUSE="/path/to/ref/mm39n.chrom.sizes"
 BLACKLIST_HG38="/path/to/ref/blacklist_hg38_ENCFF356LFX.bed"
 BLACKLIST_MM39="/path/to/ref/blacklist_mm39.bed"
 
+# Gene annotations (required for TSS QC and built-in peak annotation)
+GTF_HUMAN="/path/to/ref/gencode.hg38.annotation.gtf"
+GTF_MOUSE="/path/to/ref/gencode.mm39.annotation.gtf"
+
 # deepTools QC threads (Step 10) — required as of v3.1.0
 THREADS_DEEPTOOLS=16
 ```
 
-These are the **only** reference file variables required by the v3.1.0 pipeline.
+The matching cCRE BED, Bowtie2 index, chromosome sizes, blacklist and GTF are
+required by the default v3.2.0 configuration. Set `RUN_CCRE_ANNOTATION=false`
+to remove only the cCRE requirement while retaining GTF annotation.
 
 ---
 

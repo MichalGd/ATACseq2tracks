@@ -203,6 +203,21 @@ Pre-flight check (step 0) requires 50 GB free. For 30+ samples with PE reads, bu
 
 ---
 
+## Differential analysis is skipped for a condition
+
+Check `differential_accessibility_condition_eligibility.tsv`. A condition needs
+at least two distinct biological sample keys (`sample_id + replicate`) to enter
+DiffBind or DESeq2ATAC models. A singleton condition is intentionally retained
+in consensus construction and all non-differential stages but has no contrast.
+This is a `SKIPPED` eligibility decision, not a failed sample.
+
+If an eligible pair fails, inspect its `comparisons/<comparison_id>/status.txt`
+and the method log. The consolidated report is still written under `reports/`,
+and cleanup is suppressed. Rerunning Step 12 or 12a refits the corresponding
+broad/narrow model.
+
+---
+
 ## General checklist
 
 - [ ] Running from the **parent** of `ATACseq2tracks/`, not from inside it

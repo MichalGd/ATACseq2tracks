@@ -86,6 +86,30 @@ bash scripts/diffbind_analysis.sh diffbind diffbind_results
 
 This writes results and diagnostic plots under `diffbind_results/`.
 
+The automated module accepts any number and names of conditions. Every valid
+sample contributes to the all-sample consensus. Conditions with fewer than two
+biological samples are listed in the eligibility table but excluded from the
+statistical model; all remaining condition pairs are analyzed. The directory
+layout is:
+
+```text
+diffbind_results/diffbind_samplesheet_<genome>_<broad|narrow>/
+|-- diffbind_consensus_peaks.bed
+|-- differential_accessibility_condition_eligibility.tsv
+|-- differential_accessibility_comparisons.tsv
+`-- comparisons/<comparison_id>/
+    |-- diffbind_results_all_sites.csv
+    |-- diffbind_results.csv
+    |-- diffbind_summary.txt
+    `-- diffbind_{pca,heatmap,ma,volcano}.png
+```
+
+One `~Condition` model is fitted per broad/narrow analysis and every eligible
+pair is added as an explicit contrast. Set `DIFFERENTIAL_CONDITION_ORDER` to
+control numerator/reference direction; otherwise first samplesheet appearance
+defines the order. A two-condition run also retains the established root-level
+result filenames.
+
 Automated ATAC counting uses `DIFFBIND_SUMMITS=100` by default, yielding an
 approximately 201-bp summit-centred window. Set `DIFFBIND_SUMMITS=200` in the
 configuration to reproduce the previous approximately 401-bp behavior. The

@@ -21,6 +21,10 @@ suppressPackageStartupMessages({
     library(ggplot2)
 })
 
+script_file <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1])
+script_dir <- dirname(normalizePath(script_file, mustWork = TRUE))
+source(file.path(script_dir, "peak_annotation_helpers.R"))
+
 trim_character_columns <- function(x) {
     for (name in names(x)) {
         if (is.character(x[[name]])) x[[name]] <- trimws(x[[name]])
@@ -84,6 +88,60 @@ significant_rows <- function(result_table, alpha) {
     !is.na(result_table$padj) & result_table$padj <= alpha
 }
 
+safe_token <- function(value) {
+    token <- iconv(as.character(value), to = "ASCII//TRANSLIT", sub = "_")
+    token <- gsub("[^A-Za-z0-9._-]+", "_", token)
+    token <- gsub("^_+|_+$", "", token)
+    ifelse(token == "", "condition", substr(token, 1L, 60L))
+}
+
+resolve_condition_order <- function(observed, configured = "", reference = "") {
+    observed <- unique(trimws(as.character(observed)))
+    requested <- trimws(unlist(strsplit(configured, ",", fixed = TRUE)))
+    requested <- requested[requested != ""]
+    if (anyDuplicated(requested)) stop("DIFFERENTIAL_CONDITION_ORDER contains duplicate names")
+    unknown <- setdiff(requested, observed)
+    if (length(unknown)) stop("Unknown condition(s) in DIFFERENTIAL_CONDITION_ORDER: ",
+                              paste(unknown, collapse = ", "))
+    order <- c(requested, setdiff(observed, requested))
+    if (reference != "") {
+        if (!reference %in% observed) stop("Reference condition is not present: ", reference)
+        order <- c(reference, setdiff(order, reference))
+    }
+    order
+}
+
+comparison_plan <- function(condition_order) {
+    if (length(condition_order) < 2L) {
+        return(data.frame(comparison_id = character(), numerator = character(),
+                          reference = character(), stringsAsFactors = FALSE))
+    }
+    pairs <- utils::combn(condition_order, 2L)
+    data.frame(
+        comparison_id = sprintf(
+            "%03d_%s_vs_%s", seq_len(ncol(pairs)),
+            vapply(pairs[2L, ], safe_token, character(1)),
+            vapply(pairs[1L, ], safe_token, character(1))
+        ),
+        numerator = pairs[2L, ],
+        reference = pairs[1L, ],
+        stringsAsFactors = FALSE
+    )
+}
+
+summary_columns <- c(
+    "module", "peak_type", "comparison_id", "numerator", "reference",
+    "numerator_replicates", "reference_replicates", "consensus_regions",
+    "tested_sites", "significant_sites", "higher_in_numerator",
+    "higher_in_reference", "alpha", "min_abs_log2fc", "status",
+    "results_all", "results_significant", "summary_file", "message"
+)
+
+empty_summary_row <- function() {
+    as.data.frame(setNames(replicate(length(summary_columns), NA_character_, simplify = FALSE),
+                           summary_columns), stringsAsFactors = FALSE)
+}
+
 render_pair <- function(stem, plot_function, width = 7, height = 6) {
     png_arguments <- list(filename = paste0(stem, ".png"), width = width,
                           height = height, units = "in", res = 300)
@@ -107,10 +165,9 @@ plot_matrix <- function(matrix, title, palette) {
 run_synthetic_self_test <- function() {
     set.seed(320)
     n <- 400L
-    baseline <- pmax(20L, rnbinom(n, mu = 120, size = 15))
-    a1 <- pmax(1L, round(baseline * 0.93))
-    a2 <- pmax(1L, round(baseline * 1.07))
-    no_effect <- cbind(A1 = a1, A2 = a2, B1 = a1, B2 = a2)
+    no_effect <- matrix(rnbinom(n * 4L, mu = 120, size = 15), nrow = n)
+    no_effect <- pmax(1L, no_effect)
+    colnames(no_effect) <- c("A1", "A2", "B1", "B2")
     metadata <- data.frame(condition = factor(c("A", "A", "B", "B"), levels = c("A", "B")))
     rownames(metadata) <- colnames(no_effect)
 
@@ -130,6 +187,13 @@ run_synthetic_self_test <- function() {
     effect_result <- fit_one(strong_effect)
     stopifnot(sum(significant_rows(effect_result, 0.05)) > 0L)
 
+    ordered <- resolve_condition_order(c("stem", "prolif", "Day4", "singleton"))
+    eligible <- ordered[c(TRUE, TRUE, TRUE, FALSE)]
+    planned <- comparison_plan(eligible)
+    stopifnot(nrow(planned) == 3L,
+              identical(planned$numerator, c("prolif", "Day4", "Day4")),
+              identical(planned$reference, c("stem", "stem", "prolif")))
+
     probe <- data.frame(padj = c(NA_real_, 0.01, 0.2))
     stopifnot(identical(significant_rows(probe, 0.05), c(FALSE, TRUE, FALSE)))
 
@@ -143,7 +207,7 @@ run_synthetic_self_test <- function() {
     })))
     test_consensus <- reduce(test_atoms[test_support >= 2L])
     stopifnot(length(test_consensus) == 1L, start(test_consensus) == 25L,
-              end(test_consensus) == 75L)
+              end(test_consensus) == 60L)
 
     compressed_probe <- tempfile(fileext = ".tsv.gz")
     write_tsv_gz(data.frame(id = 1:2, value = c("a", "b")), compressed_probe)
@@ -173,6 +237,7 @@ run_synthetic_self_test <- function() {
     cat("OK   DESeq2ATAC synthetic significant and zero-significant analyses\n")
     cat("OK   DESeq2ATAC support threshold and compressed output self-tests\n")
     cat("OK   DESeq2ATAC paired fragment once and single-end read counting self-tests\n")
+    cat("OK   DESeq2ATAC universal pair planning and singleton exclusion self-tests\n")
 }
 
 args <- commandArgs(trailingOnly = TRUE)
@@ -180,11 +245,13 @@ if (length(args) == 1L && identical(args[[1]], "--self-test")) {
     run_synthetic_self_test()
     quit(save = "no", status = 0L)
 }
-if (!(length(args) %in% c(11L, 12L))) {
+if (length(args) < 11L || length(args) > 20L) {
     stop(paste(
         "Usage: deseq2atac_analysis.R <samplesheet.csv> <bam_dir> <peaks_dir>",
         "<out_dir> <genome> <blacklist.bed> <min_support> <alpha>",
-        "<block_column_or_empty> <reference_condition_or_empty> <min_mapq> [broad|narrow]"
+        "<block_column_or_empty> <reference_condition_or_empty> <min_mapq> [broad|narrow]",
+        "[condition_order_csv] [min_abs_log2fc] [annotate] [gtf] [ccre_bed]",
+        "[ccre_source] [promoter_upstream] [promoter_downstream]"
     ))
 }
 
@@ -199,7 +266,17 @@ alpha <- suppressWarnings(as.numeric(args[[8]]))
 block_column <- trimws(args[[9]])
 reference_condition <- trimws(args[[10]])
 min_mapq <- suppressWarnings(as.integer(args[[11]]))
-peak_type <- if (length(args) == 12L) tolower(trimws(args[[12]])) else "broad"
+peak_type <- if (length(args) >= 12L) tolower(trimws(args[[12]])) else "broad"
+configured_order <- if (length(args) >= 13L) trimws(args[[13]]) else ""
+min_abs_log2fc <- if (length(args) >= 14L) suppressWarnings(as.numeric(args[[14]])) else 0
+annotation_enabled <- if (length(args) >= 15L) {
+    tolower(trimws(args[[15]])) %in% c("true", "1", "yes")
+} else FALSE
+gtf_file <- if (length(args) >= 16L) args[[16]] else ""
+ccre_file <- if (length(args) >= 17L) args[[17]] else ""
+ccre_source <- if (length(args) >= 18L) args[[18]] else ""
+promoter_upstream <- if (length(args) >= 19L) suppressWarnings(as.integer(args[[19]])) else 2000L
+promoter_downstream <- if (length(args) >= 20L) suppressWarnings(as.integer(args[[20]])) else 500L
 
 if (!file.exists(samplesheet)) stop("Samplesheet not found: ", samplesheet)
 if (!dir.exists(bam_dir)) stop("BAM directory not found: ", bam_dir)
@@ -208,10 +285,14 @@ if (!file.exists(blacklist_file)) stop("Blacklist not found: ", blacklist_file)
 if (is.na(min_support) || min_support < 1L) stop("min_support must be a positive integer")
 if (is.na(alpha) || alpha <= 0 || alpha >= 1) stop("alpha must be between zero and one")
 if (is.na(min_mapq) || min_mapq < 0L) stop("min_mapq must be a non-negative integer")
+if (is.na(min_abs_log2fc) || min_abs_log2fc < 0) {
+    stop("min_abs_log2fc must be a non-negative number")
+}
 if (!genome %in% c("hg38", "mm39")) stop("Unsupported genome: ", genome)
 if (!(peak_type %in% c("broad", "narrow"))) {
     stop("peak_type must be broad or narrow; received: ", peak_type)
 }
+if (annotation_enabled && !file.exists(gtf_file)) stop("GTF annotation not found: ", gtf_file)
 
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 plot_dir <- file.path(out_dir, "plots")
@@ -257,29 +338,30 @@ if (length(unique(metadata$layout)) != 1L || !unique(metadata$layout) %in% c("PE
     stop("DESeq2ATAC requires one PE-only or SE-only cohort")
 }
 layout <- unique(metadata$layout)
-condition_counts <- table(metadata$condition)
-if (length(condition_counts) != 2L) {
-    stop("DESeq2ATAC currently requires exactly two conditions; found: ",
-         paste(names(condition_counts), collapse = ", "))
-}
-if (any(condition_counts < 2L)) {
-    stop("Each DESeq2ATAC condition requires at least two biological replicates: ",
-         paste(names(condition_counts), condition_counts, sep = "=", collapse = ", "))
-}
+observed_conditions <- unique(metadata$condition)
+condition_counts <- table(factor(metadata$condition, levels = observed_conditions))
+eligible_conditions <- observed_conditions[as.integer(condition_counts) >= 2L]
+condition_order <- resolve_condition_order(
+    observed_conditions, configured_order, reference_condition
+)
+eligible_order <- condition_order[condition_order %in% eligible_conditions]
+eligibility_table <- data.frame(
+    condition = observed_conditions,
+    biological_replicates = as.integer(condition_counts[observed_conditions]),
+    included_in_consensus = TRUE,
+    included_in_differential_model = observed_conditions %in% eligible_conditions,
+    reason = ifelse(observed_conditions %in% eligible_conditions, "eligible",
+                    "fewer_than_two_biological_replicates"),
+    stringsAsFactors = FALSE
+)
+write.table(
+    eligibility_table,
+    file.path(out_dir, "differential_accessibility_condition_eligibility.tsv"),
+    sep = "\t", row.names = FALSE, quote = FALSE
+)
 if (nrow(metadata) < min_support) {
     stop("DESeq2ATAC minimum peak support exceeds the number of biological samples")
 }
-
-conditions <- sort(names(condition_counts))
-if (reference_condition == "") reference_condition <- conditions[[1]]
-if (!reference_condition %in% conditions) {
-    stop("Reference condition is not present: ", reference_condition)
-}
-numerator_condition <- setdiff(conditions, reference_condition)
-if (length(numerator_condition) != 1L) stop("Unable to determine contrast numerator")
-
-metadata$condition <- factor(metadata$condition, levels = c(reference_condition, numerator_condition))
-if (block_column != "") metadata[[block_column]] <- factor(metadata[[block_column]])
 
 metadata$bam <- file.path(bam_dir, paste0(metadata$key, "_dedup_blFilt.bam"))
 peak_extension <- if (peak_type == "broad") "broadPeak" else "narrowPeak"
@@ -294,6 +376,8 @@ if (length(missing_peaks)) {
     stop("Missing/empty ", peak_type, " peaks (set macs2_mode=both): ",
          paste(missing_peaks, collapse = ", "))
 }
+write.table(metadata, file.path(out_dir, "deseq2atac_all_sample_metadata.tsv"),
+            sep = "\t", row.names = FALSE, quote = FALSE)
 
 message("DESeq2ATAC ", peak_type, ": importing and filtering peaks")
 blacklist <- canonicalize_ranges(import(blacklist_file), genome)
@@ -359,6 +443,19 @@ write.table(bed_table, file.path(out_dir, "deseq2atac_consensus_peaks.bed"),
             sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE)
 write_tsv_gz(region_table, file.path(out_dir, "deseq2atac_consensus_peaks_with_support.tsv.gz"))
 
+annotations <- NULL
+if (annotation_enabled) {
+    message("DESeq2ATAC ", peak_type, ": annotating the shared all-sample consensus")
+    annotations <- annotate_peak_ranges(
+        consensus, peak_ids, genome, gtf_file, ccre_file, ccre_source,
+        promoter_upstream, promoter_downstream
+    )
+    write_tsv_gz(
+        annotations,
+        file.path(out_dir, "deseq2atac_consensus_peak_annotations.tsv.gz")
+    )
+}
+
 message("DESeq2ATAC ", peak_type, ": counting ",
         ifelse(layout == "PE", "properly paired fragments", "single-end reads"))
 flag_filter <- if (layout == "PE") {
@@ -408,22 +505,56 @@ storage.mode(raw_counts_all) <- "integer"
 write_matrix_gz(raw_counts_all, region_table,
                 file.path(out_dir, "deseq2atac_raw_counts.tsv.gz"))
 
-nonzero <- rowSums(raw_counts_all) > 0L
-if (!any(nonzero)) stop("All DESeq2ATAC consensus-region counts are zero")
-raw_counts <- raw_counts_all[nonzero, , drop = FALSE]
+plan <- comparison_plan(eligible_order)
+comparison_summary_file <- file.path(out_dir, "differential_accessibility_comparisons.tsv")
+if (!nrow(plan)) {
+    skipped <- empty_summary_row()
+    skipped$module <- "DESeq2ATAC"
+    skipped$peak_type <- peak_type
+    skipped$consensus_regions <- nrow(region_table)
+    skipped$alpha <- alpha
+    skipped$min_abs_log2fc <- min_abs_log2fc
+    skipped$status <- "SKIPPED"
+    skipped$summary_file <- file.path(out_dir, "deseq2atac_summary.txt")
+    skipped$message <- "Fewer than two conditions have at least two biological replicates"
+    write.table(skipped, comparison_summary_file, sep = "\t", row.names = FALSE,
+                col.names = TRUE, quote = FALSE, na = "NA")
+    writeLines(c(
+        paste("DESeq2ATAC", peak_type, "differential accessibility summary"),
+        "Status: SKIPPED",
+        paste("Peak type:", peak_type),
+        paste("Genome:", genome),
+        paste("Biological samples in consensus:", nrow(metadata)),
+        paste("Conditions:", paste(names(condition_counts), condition_counts, sep = "=", collapse = ", ")),
+        paste("Consensus regions:", nrow(region_table)),
+        "Reason: fewer than two conditions have at least two biological replicates",
+        "All samples still participated in consensus construction and raw counting."
+    ), file.path(out_dir, "deseq2atac_summary.txt"))
+    writeLines(capture.output(sessionInfo()), file.path(out_dir, "deseq2atac_session_info.txt"))
+    message("DESeq2ATAC ", peak_type, ": statistical analysis skipped; no eligible pair")
+    quit(save = "no", status = 0L)
+}
+
+model_metadata <- metadata[metadata$condition %in% eligible_order, , drop = FALSE]
+model_metadata$condition <- factor(model_metadata$condition, levels = eligible_order)
+if (block_column != "") model_metadata[[block_column]] <- droplevels(factor(model_metadata[[block_column]]))
+model_keys <- model_metadata$key
+nonzero <- rowSums(raw_counts_all[, model_keys, drop = FALSE]) > 0L
+if (!any(nonzero)) stop("All eligible-sample DESeq2ATAC consensus-region counts are zero")
+raw_counts <- raw_counts_all[nonzero, model_keys, drop = FALSE]
 tested_regions <- region_table[nonzero, , drop = FALSE]
 
 col_data <- data.frame(
-    sample_id = metadata$sample_id,
-    key = metadata$key,
-    condition = metadata$condition,
-    replicate = metadata$replicate,
-    layout = metadata$layout,
-    genome = metadata$genome,
-    row.names = metadata$key,
+    sample_id = model_metadata$sample_id,
+    key = model_metadata$key,
+    condition = model_metadata$condition,
+    replicate = model_metadata$replicate,
+    layout = model_metadata$layout,
+    genome = model_metadata$genome,
+    row.names = model_metadata$key,
     stringsAsFactors = FALSE
 )
-if (block_column != "") col_data[[block_column]] <- metadata[[block_column]]
+if (block_column != "") col_data[[block_column]] <- model_metadata[[block_column]]
 design_formula <- if (block_column == "") {
     ~ condition
 } else {
@@ -434,33 +565,12 @@ if (qr(design_matrix)$rank < ncol(design_matrix)) {
     stop("DESeq2ATAC design is not full rank; block and condition may be confounded")
 }
 
-message("DESeq2ATAC ", peak_type, ": fitting ", deparse(design_formula), " and contrast ",
-        numerator_condition, " vs ", reference_condition)
+message("DESeq2ATAC ", peak_type, ": fitting one ", deparse(design_formula),
+        " model for ", nrow(plan), " pairwise contrasts")
 dds <- DESeqDataSetFromMatrix(countData = raw_counts, colData = col_data,
                               design = design_formula)
 dds <- estimateSizeFactors(dds, type = "poscounts")
 dds <- DESeq(dds, quiet = TRUE)
-result <- results(
-    dds,
-    contrast = c("condition", numerator_condition, reference_condition),
-    alpha = alpha
-)
-result_table <- cbind(
-    tested_regions[match(rownames(result), tested_regions$peak_id), , drop = FALSE],
-    as.data.frame(result, stringsAsFactors = FALSE)
-)
-result_table$direction <- ifelse(
-    is.na(result_table$log2FoldChange), NA_character_,
-    ifelse(result_table$log2FoldChange > 0,
-           paste0("higher_in_", numerator_condition),
-           ifelse(result_table$log2FoldChange < 0,
-                  paste0("higher_in_", reference_condition), "unchanged"))
-)
-is_significant <- significant_rows(result_table, alpha)
-significant_table <- result_table[is_significant, , drop = FALSE]
-
-write_tsv_gz(result_table, file.path(out_dir, "deseq2atac_results_all.tsv.gz"))
-write_tsv_gz(significant_table, file.path(out_dir, "deseq2atac_results_significant.tsv.gz"))
 normalized_counts <- counts(dds, normalized = TRUE)
 write_matrix_gz(normalized_counts, tested_regions,
                 file.path(out_dir, "deseq2atac_normalized_counts.tsv.gz"))
@@ -507,7 +617,8 @@ library_table <- data.frame(
     canonical_filtered_signal_count = as.numeric(signal_counts),
     assigned_to_consensus = as.numeric(assigned_counts[metadata$key]),
     fraction_assigned = as.numeric(assigned_counts[metadata$key]) / signal_counts,
-    size_factor = as.numeric(sizeFactors(dds)[metadata$key]),
+    differential_model_eligible = metadata$key %in% model_keys,
+    size_factor = as.numeric(sizeFactors(dds)[match(metadata$key, names(sizeFactors(dds)))]),
     stringsAsFactors = FALSE
 )
 write.table(library_table, file.path(out_dir, "deseq2atac_library_summary.tsv"),
@@ -567,65 +678,209 @@ write.table(pca_data, file.path(out_dir, "deseq2atac_pca_data.tsv"), sep = "\t",
 
 render_pair(file.path(plot_dir, "dispersion_estimates"),
             function() plotDispEsts(dds), width = 7, height = 6)
-render_pair(file.path(plot_dir, "ma"),
-            function() plotMA(result, alpha = alpha, ylim = c(-5, 5)), width = 7, height = 6)
 
-volcano_data <- result_table[!is.na(result_table$pvalue) &
-                             !is.na(result_table$log2FoldChange), , drop = FALSE]
-volcano_data$minus_log10_pvalue <- -log10(pmax(volcano_data$pvalue, .Machine$double.xmin))
-volcano_data$significance <- ifelse(significant_rows(volcano_data, alpha),
-                                    paste0("FDR <= ", alpha), "Not significant")
-volcano_plot <- ggplot(volcano_data, aes(log2FoldChange, minus_log10_pvalue,
-                                        color = significance)) +
-    geom_point(alpha = 0.55, size = 0.8) +
-    scale_color_manual(values = c("Not significant" = "grey65",
-                                  setNames("#B2182B", paste0("FDR <= ", alpha)))) +
-    labs(x = paste0("log2 fold change: ", numerator_condition, " / ", reference_condition),
-        y = "-log10(raw P-value)",
-        title = paste("DESeq2ATAC", peak_type, "volcano plot"), color = NULL) +
-    theme_bw(base_size = 11)
-render_pair(file.path(plot_dir, "volcano"), function() print(volcano_plot), width = 7, height = 6)
+comparisons_dir <- file.path(out_dir, "comparisons")
+dir.create(comparisons_dir, recursive = TRUE, showWarnings = FALSE)
+comparison_rows <- list()
+comparison_failures <- 0L
 
-if (nrow(significant_table) > 0L) {
-    direction_counts <- table(significant_table$direction)
-    render_pair(file.path(plot_dir, "significant_site_overview"), function() {
-        barplot(direction_counts, col = c("#2166AC", "#B2182B"), las = 2,
-                ylab = "Significant consensus regions",
-                main = paste0("DESeq2ATAC ", peak_type, " sites at FDR <= ", alpha))
-    }, width = 7, height = 6)
+for (index in seq_len(nrow(plan))) {
+    comparison <- plan[index, , drop = FALSE]
+    comparison_out <- file.path(comparisons_dir, comparison$comparison_id)
+    comparison_plot_dir <- file.path(comparison_out, "plots")
+    dir.create(comparison_plot_dir, recursive = TRUE, showWarnings = FALSE)
+    results_all_file <- file.path(comparison_out, "deseq2atac_results_all.tsv.gz")
+    results_significant_file <- file.path(comparison_out, "deseq2atac_results_significant.tsv.gz")
+    comparison_summary <- file.path(comparison_out, "deseq2atac_summary.txt")
+    status_file <- file.path(comparison_out, "status.txt")
+    row <- empty_summary_row()
+    row$module <- "DESeq2ATAC"
+    row$peak_type <- peak_type
+    row$comparison_id <- comparison$comparison_id
+    row$numerator <- comparison$numerator
+    row$reference <- comparison$reference
+    row$numerator_replicates <- as.integer(condition_counts[comparison$numerator])
+    row$reference_replicates <- as.integer(condition_counts[comparison$reference])
+    row$consensus_regions <- nrow(region_table)
+    row$alpha <- alpha
+    row$min_abs_log2fc <- min_abs_log2fc
+    row$results_all <- results_all_file
+    row$results_significant <- results_significant_file
+    row$summary_file <- comparison_summary
+
+    error_message <- tryCatch({
+        result <- results(
+            dds,
+            contrast = c("condition", comparison$numerator, comparison$reference),
+            alpha = alpha
+        )
+        result_table <- cbind(
+            tested_regions[match(rownames(result), tested_regions$peak_id), , drop = FALSE],
+            as.data.frame(result, stringsAsFactors = FALSE)
+        )
+        result_table$direction <- ifelse(
+            is.na(result_table$log2FoldChange), NA_character_,
+            ifelse(result_table$log2FoldChange > 0,
+                   paste0("higher_in_", comparison$numerator),
+                   ifelse(result_table$log2FoldChange < 0,
+                          paste0("higher_in_", comparison$reference), "unchanged"))
+        )
+        is_significant <- significant_rows(result_table, alpha) &
+            !is.na(result_table$log2FoldChange) &
+            abs(result_table$log2FoldChange) >= min_abs_log2fc
+        significant_table <- result_table[is_significant, , drop = FALSE]
+        if (!is.null(annotations)) {
+            result_table <- annotation_join(result_table, annotations, "peak_id")
+            significant_table <- annotation_join(significant_table, annotations, "peak_id")
+        }
+        write_tsv_gz(result_table, results_all_file)
+        write_tsv_gz(significant_table, results_significant_file)
+
+        render_pair(file.path(comparison_plot_dir, "ma"),
+                    function() plotMA(result, alpha = alpha, ylim = c(-5, 5)),
+                    width = 7, height = 6)
+        volcano_data <- result_table[!is.na(result_table$pvalue) &
+                                     !is.na(result_table$log2FoldChange), , drop = FALSE]
+        volcano_data$minus_log10_pvalue <- -log10(pmax(
+            volcano_data$pvalue, .Machine$double.xmin
+        ))
+        volcano_data$significance <- ifelse(
+            !is.na(volcano_data$padj) & volcano_data$padj <= alpha &
+                abs(volcano_data$log2FoldChange) >= min_abs_log2fc,
+            paste0("FDR <= ", alpha), "Not significant"
+        )
+        volcano_plot <- ggplot(
+            volcano_data,
+            aes(log2FoldChange, minus_log10_pvalue, color = significance)
+        ) +
+            geom_point(alpha = 0.55, size = 0.8) +
+            scale_color_manual(values = c(
+                "Not significant" = "grey65",
+                setNames("#B2182B", paste0("FDR <= ", alpha))
+            )) +
+            labs(
+                x = paste0("log2 fold change: ", comparison$numerator,
+                           " / ", comparison$reference),
+                y = "-log10(raw P-value)",
+                title = paste("DESeq2ATAC", peak_type, comparison$comparison_id),
+                color = NULL
+            ) + theme_bw(base_size = 11)
+        render_pair(file.path(comparison_plot_dir, "volcano"),
+                    function() print(volcano_plot), width = 7, height = 6)
+
+        if (nrow(significant_table) > 0L) {
+            direction_counts <- table(significant_table$direction)
+            render_pair(file.path(comparison_plot_dir, "significant_site_overview"),
+                        function() {
+                barplot(direction_counts, col = c("#2166AC", "#B2182B"), las = 2,
+                        ylab = "Significant consensus regions",
+                        main = paste0("DESeq2ATAC ", peak_type,
+                                      " sites at FDR <= ", alpha))
+            }, width = 7, height = 6)
+        }
+        if (!is.null(annotations)) {
+            write_peak_annotation_summary(
+                significant_table, rep(TRUE, nrow(significant_table)),
+                file.path(comparison_out, "annotation_summary.tsv")
+            )
+        }
+
+        higher_numerator <- sum(significant_table$log2FoldChange > 0, na.rm = TRUE)
+        higher_reference <- sum(significant_table$log2FoldChange < 0, na.rm = TRUE)
+        row$tested_sites <- nrow(result_table)
+        row$significant_sites <- nrow(significant_table)
+        row$higher_in_numerator <- higher_numerator
+        row$higher_in_reference <- higher_reference
+        row$status <- "SUCCESS"
+        row$message <- if (nrow(significant_table)) "completed" else {
+            "completed_with_zero_significant_sites"
+        }
+        writeLines(c(
+            paste("DESeq2ATAC", peak_type, "differential accessibility comparison"),
+            "Status: SUCCESS",
+            paste("Comparison ID:", comparison$comparison_id),
+            paste("Contrast:", comparison$numerator, "vs", comparison$reference),
+            paste("Positive log2 fold change means: higher accessibility in", comparison$numerator),
+            paste("Numerator biological replicates:", row$numerator_replicates),
+            paste("Reference biological replicates:", row$reference_replicates),
+            paste("All-sample consensus regions:", nrow(region_table)),
+            paste("Nonzero tested regions:", nrow(result_table)),
+            paste("FDR threshold:", alpha),
+            paste("Minimum absolute log2 fold change:", min_abs_log2fc),
+            paste("Significant regions:", nrow(significant_table)),
+            paste("Higher in numerator:", higher_numerator),
+            paste("Higher in reference:", higher_reference),
+            paste("Independent-filtered/NA adjusted P-values:", sum(is.na(result_table$padj)))
+        ), comparison_summary)
+        writeLines("SUCCESS", status_file)
+        NULL
+    }, error = function(error) conditionMessage(error))
+
+    if (!is.null(error_message)) {
+        comparison_failures <- comparison_failures + 1L
+        row$status <- "FAILED"
+        row$message <- error_message
+        writeLines(c("FAILED", error_message), status_file)
+        writeLines(c(
+            paste("DESeq2ATAC", peak_type, "differential accessibility comparison"),
+            "Status: FAILED",
+            paste("Comparison ID:", comparison$comparison_id),
+            paste("Contrast:", comparison$numerator, "vs", comparison$reference),
+            paste("Error:", error_message)
+        ), comparison_summary)
+    }
+    comparison_rows[[length(comparison_rows) + 1L]] <- row
 }
 
+comparison_table <- do.call(rbind, comparison_rows)
+write.table(comparison_table, comparison_summary_file, sep = "\t", row.names = FALSE,
+            col.names = TRUE, quote = FALSE, na = "NA")
 saveRDS(dds, file.path(out_dir, "deseq2atac_analysis_object.rds"))
 writeLines(capture.output(sessionInfo()), file.path(out_dir, "deseq2atac_session_info.txt"))
 
-zero_message <- if (nrow(significant_table) == 0L) {
-    paste0("No regions passed FDR <= ", alpha,
-           "; the analysis completed successfully and all tested regions are retained.")
-} else {
-    paste(nrow(significant_table), "regions passed the configured FDR threshold.")
+# Preserve root-level result and contrast-plot names for a two-condition run.
+if (nrow(plan) == 1L && comparison_table$status[[1]] == "SUCCESS") {
+    legacy_source <- file.path(comparisons_dir, plan$comparison_id[[1]])
+    file.copy(file.path(legacy_source, "deseq2atac_results_all.tsv.gz"),
+              file.path(out_dir, "deseq2atac_results_all.tsv.gz"), overwrite = TRUE)
+    file.copy(file.path(legacy_source, "deseq2atac_results_significant.tsv.gz"),
+              file.path(out_dir, "deseq2atac_results_significant.tsv.gz"), overwrite = TRUE)
+    for (stem in c("ma", "volcano", "significant_site_overview")) {
+        for (extension in c("png", "pdf")) {
+            source_plot <- file.path(legacy_source, "plots", paste0(stem, ".", extension))
+            if (file.exists(source_plot)) {
+                file.copy(source_plot, file.path(plot_dir, basename(source_plot)), overwrite = TRUE)
+            }
+        }
+    }
 }
+
+overall_status <- if (comparison_failures) "FAILED" else "SUCCESS"
 summary_lines <- c(
     paste("DESeq2ATAC", peak_type, "differential accessibility summary"),
-    paste("Status: SUCCESS"),
+    paste("Status:", overall_status),
     paste("Peak type:", peak_type),
     paste("Genome:", genome),
     paste("Layout:", layout),
     paste("Signal unit:", ifelse(layout == "PE", "properly paired fragment", "single-end read")),
-    paste("Biological samples:", nrow(metadata)),
+    paste("All biological samples in consensus:", nrow(metadata)),
     paste("Conditions:", paste(names(condition_counts), condition_counts, sep = "=", collapse = ", ")),
+    paste("Eligible model conditions:", paste(eligible_order, collapse = ", ")),
+    paste("Excluded model conditions:", paste(setdiff(observed_conditions, eligible_order), collapse = ", ")),
     paste("Design:", deparse(design_formula)),
-    paste("Contrast:", numerator_condition, "vs", reference_condition),
-    paste("Positive log2 fold change means: higher accessibility in", numerator_condition),
     paste("Minimum sample support:", min_support),
     paste("Consensus regions:", nrow(region_table)),
-    paste("Nonzero tested regions:", nrow(result_table)),
+    paste("Nonzero modeled regions:", nrow(tested_regions)),
+    paste("Planned pairwise comparisons:", nrow(plan)),
+    paste("Successful comparisons:", sum(comparison_table$status == "SUCCESS")),
+    paste("Failed comparisons:", comparison_failures),
     paste("FDR threshold:", alpha),
-    paste("Significant regions:", nrow(significant_table)),
-    paste("Independent-filtered/NA adjusted P-values:", sum(is.na(result_table$padj))),
-    paste("Size-factor method: DESeq2 poscounts"),
-    paste("Counting method: GenomicAlignments summarizeOverlaps Union; inter.feature=TRUE"),
-    zero_message
+    paste("Minimum absolute log2 fold change:", min_abs_log2fc),
+    "Size-factor method: DESeq2 poscounts on model-eligible samples",
+    "Counting method: GenomicAlignments summarizeOverlaps Union; inter.feature=TRUE",
+    paste("Comparison summary:", comparison_summary_file)
 )
 writeLines(summary_lines, file.path(out_dir, "deseq2atac_summary.txt"))
-message("DESeq2ATAC ", peak_type, " complete: ", nrow(result_table), " tested; ",
-        nrow(significant_table), " significant at FDR <= ", alpha)
+message("DESeq2ATAC ", peak_type, " complete: ", nrow(plan),
+        " planned comparisons; ", comparison_failures, " failed")
+if (comparison_failures) quit(save = "no", status = 1L)

@@ -50,6 +50,13 @@ Biological replicates should remain separate through:
 
 The pipeline produces one filtered BAM per biological replicate.
 
+For differential accessibility, conditions with at least two biological samples
+are model-eligible. All eligible condition pairs are generated automatically,
+regardless of condition names or total condition count. Conditions with one
+biological sample are excluded only from the statistical model and contrasts;
+their samples still contribute to all-sample consensus construction and every
+upstream/non-differential output.
+
 ## When to merge
 
 - **Merge technical replicates:** always merge at the library level before peak calling.

@@ -101,6 +101,12 @@ rm /path/to/my_project/analysis/.checkpoints/step12.done   # DiffBind only
 rm /path/to/my_project/analysis/.checkpoints/step12a.done  # DESeq2ATAC only
 ```
 
+Each differential module refits its broad/narrow model and rewrites that model's
+condition-pair outputs when rerun; status files are diagnostic, not independent
+contrast checkpoints. Broad/narrow and peer modules are failure-isolated. If a
+differential module fails, the workflow still writes the consolidated TSV/HTML
+summary, exits non-zero, and does not perform automatic cleanup.
+
 To rerun everything from scratch:
 ```bash
 rm -rf /path/to/my_project/analysis/.checkpoints/

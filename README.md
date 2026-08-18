@@ -22,6 +22,11 @@ ATACseq2tracks is a samplesheet-driven Bash workflow for bulk ATAC-seq and relat
 - DiffBind differential accessibility with configurable ATAC summit windows;
 - independent DESeq2ATAC broad- and narrow-consensus differential analyses with
   raw fragment/read counts, complete result tables and PNG/PDF diagnostics;
+- universal all-pair differential analysis for any number or names of conditions,
+  while singleton conditions remain in consensus construction but not models;
+- built-in GTF gene-context/nearest-TSS annotation and default genome-matched
+  cCRE classification of complete consensus universes and differential results;
+- concise pair-level TSV and HTML summaries with increased/decreased site counts;
 - UCSC custom-track definitions;
 - optional HOMER peak annotation and motif enrichment, disabled by default.
 
@@ -46,16 +51,17 @@ flowchart TD
     L --> M[Consensus peaks + DESeq2-scaled tracks]
 
     K --> N[11 DiffBind samplesheets]
-    N --> O[12 DiffBind analysis]
-    H --> P[12a DESeq2ATAC broad and narrow analyses]
+    N --> O[12 DiffBind broad/narrow all eligible condition pairs]
+    H --> P[12a DESeq2ATAC broad/narrow all eligible condition pairs]
     K --> P
+    O --> V[GTF and default cCRE annotation]
+    P --> V
 
     I --> Q[13 UCSC track definitions]
     J --> Q
     M --> Q
     L --> R[14 HTML pipeline report]
-    O --> R
-    P --> R
+    V --> R
     Q --> R
     R --> S{Automatic cleanup enabled?}
     S -->|No, default| T[Retain intermediates]
@@ -198,17 +204,24 @@ CONSENSUS_MIN_SAMPLES=2
 ALLOW_SINGLE_SAMPLE_CONSENSUS=false
 GENERATE_DESEQ2_CONSENSUS_TRACKS=true
 DIFFBIND_SUMMITS=100
+DIFFBIND_ALPHA=0.05
+DIFFERENTIAL_CONDITION_ORDER=""
+DIFFERENTIAL_MIN_ABS_LOG2FC=0
 RUN_DESEQ2ATAC=true
 DESEQ2ATAC_MIN_SAMPLES=2
 DESEQ2ATAC_ALPHA=0.05
 DESEQ2ATAC_BLOCK_COLUMN=""
 DESEQ2ATAC_REFERENCE_CONDITION=""
+RUN_SIMPLE_PEAK_ANNOTATION=true
+RUN_CCRE_ANNOTATION=true
+CCRE_BED_HG38="/path/to/GRCh38-cCREs-V4.bed.gz"
+CCRE_BED_MM39="/path/to/encodeCcreCombined_mm39_sorted.bed"
 SE_SIGNAL_MODE="read"
 RUN_ATAQV_QC=true
 GENERATE_ATAQV_VIEWER=true
 RUN_PEAK_ANNOTATION=false
 RUN_MOTIF_ENRICHMENT=false
-ENABLE_AUTOMATIC_CLEANUP=false
+ENABLE_AUTOMATIC_CLEANUP=true
 ```
 
 Only one genome build and one sequencing layout may be processed in a run. Separate hg38/mm39 and PE/SE libraries into different runs.
@@ -277,20 +290,46 @@ bash atacseq2tracks.sh --config /absolute/path/to/project/config/config.conf
 │   ├── narrow/
 │   └── deseq2atac_peak_type_summary.tsv
 └── reports/
+    ├── differential_accessibility_summary.tsv
+    └── differential_accessibility_summary.html
 ```
 
 The `deseq2atac/broad/` and `deseq2atac/narrow/` directories contain fully
 separate support-filtered consensuses, matrices, DESeq2 models, results, metadata,
 summaries and PNG/PDF figures. The top-level
-`deseq2atac_peak_type_summary.tsv` compares their region and result counts. See
+`deseq2atac_peak_type_summary.tsv` records their completion status. Each peak
+type has `comparisons/<comparison_id>/`; for `k` conditions with at least two
+biological samples, all `k*(k-1)/2` pairs are exported. All samples, including
+singleton-condition samples, contribute to consensus construction. See
 the differential-accessibility documentation for the exact consensus algorithm
-and its distinction from DiffBind.
+and its distinction from DiffBind and for GTF/cCRE annotation provenance.
+
+cCRE classification is required by default. Preflight verifies the reference
+for the selected genome. On a server without that reference, set
+`RUN_CCRE_ANNOTATION=false`; GTF gene-context and nearest-TSS annotation remains
+enabled for every consensus peak.
+
+Prepare the native hg38 ENCODE4 reference with:
+
+```bash
+bash utilities/prepare_encode4_hg38_ccre.sh
+```
+
+The utility validates the complete official registry and installs it at the
+default `CCRE_BED_HG38` location with checksum/provenance metadata. See
+[Reference file preparation](docs/10_reference_files.md).
 
 Each bigWig directory receives `ucsc_tracks.txt`. With `UCSC_BIGDATA_URL_BASE` unset, entries use relative filenames; configure a public HTTP(S) base URL for direct UCSC loading.
 
 ## Storage cleanup
 
-Automatic deletion is disabled by default. After a successful complete run, set `ENABLE_AUTOMATIC_CLEANUP=true` and review the `KEEP_*` settings to remove selected intermediate BAMs and trimmed FASTQs. Filtered BAMs are retained by default because QC and differential analysis depend on them. Compact histograms are stored instead of per-fragment text tables, and `ataqv` metrics use compressed JSON.
+Automatic cleanup is enabled by default and runs only after the entire workflow
+succeeds. It removes trimmed FASTQs, alignment BAMs, pre-blacklist deduplicated
+BAMs and raw bedGraphs under the default `KEEP_*` policy. Filtered quantitative
+BAMs and every final track, peak, QC, differential result and report are retained.
+Set `ENABLE_AUTOMATIC_CLEANUP=false` before a run to keep every intermediate for
+troubleshooting or planned partial-stage reruns. Compact histograms are stored
+instead of per-fragment text tables, and `ataqv` metrics use compressed JSON.
 
 ## Validation before biological use
 
@@ -337,6 +376,9 @@ The complete page list is in the [documentation index](docs/README.md).
 - PE and SE libraries cannot share one normalization cohort; run them separately.
 - SE data cannot provide observed fragment lengths or nucleosome-periodicity metrics; the supported SE signal unit is one retained read.
 - Differential inference requires biological replication and a valid, non-confounded design.
+- Conditions with fewer than two biological samples are excluded from
+  differential models but still participate in consensus construction and all
+  non-differential stages.
 - DESeq2ATAC requires non-empty broad and narrow peak files for every biological
   sample; set samplesheet `macs2_mode=both`.
 - DESeq2 consensus scaling assumes most counted accessible regions do not undergo a coordinated global shift. Use spike-in or another explicit calibration strategy when global accessibility changes are expected.

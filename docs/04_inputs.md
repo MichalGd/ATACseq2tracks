@@ -66,6 +66,14 @@ which genome to use, how to pair IPs with controls, and what type of peaks to ca
 - The pipeline preserves this field in DiffBind sample sheets if present.
 - Use `batch` when you have known technical batches, library prep blocks, or sequencing lanes.
 
+**Conditions and differential eligibility**
+- Any number and names of conditions are accepted; no condition list is hard-coded.
+- All non-control biological samples contribute to broad/narrow consensus construction.
+- A condition needs at least two biological samples to enter differential models.
+- Conditions represented once still receive trimming, alignment, filtering, peaks,
+  coverage tracks, QC, and consensus participation; only their statistical
+  modeling and contrasts are skipped.
+
 **Genome build**
 - Use one genome build per samplesheet; mixed hg38/mm39 runs are rejected.
 - Use a separate configuration and output directory for each genome build.
@@ -127,6 +135,8 @@ Copy the template and edit for your server.
 | `GTF_MOUSE` | mm39 GTF used to derive a TSS BED when none is supplied |
 | `TSS_BED_HG38` | Optional strand-aware hg38 BED6 TSS file |
 | `TSS_BED_MM39` | Optional strand-aware mm39 BED6 TSS file |
+| `CCRE_BED_HG38` | Native hg38 ENCODE4 cCRE BED/bed.gz; required for an hg38 run when cCRE annotation is enabled |
+| `CCRE_BED_MM39` | mm39 cCRE BED; required for an mm39 run when cCRE annotation is enabled |
 
 #### Blacklist regions
 
@@ -165,7 +175,7 @@ Peak concurrent CPU usage: `THREADS_PARALLEL_JOBS × THREADS_ALIGN`
 
 | Variable | Description | Default |
 |---|---|---|
-| `ENABLE_AUTOMATIC_CLEANUP` | Permit deletion of selected intermediates after full success | `false` |
+| `ENABLE_AUTOMATIC_CLEANUP` | Delete selected intermediates after full success; set false to retain everything | `true` |
 | `KEEP_INTERMEDIATE_BAMS` | Keep pre-dedup BAMs in `bams/` | `false` |
 | `KEEP_TRIMMED_FASTQ` | Keep trimmed FASTQs in `trimmedFastq/` | `false` |
 | `KEEP_DEDUP_BAMS` | Keep pre-blacklist deduplicated BAMs | `false` |
@@ -183,6 +193,12 @@ Peak concurrent CPU usage: `THREADS_PARALLEL_JOBS × THREADS_ALIGN`
 | `GENERATE_ATAQV_VIEWER` | Build the local interactive ataqv viewer | `true` |
 | `FRAGMENT_PLOT_MAX_BP` | Maximum fragment length shown in periodicity plots | `1000` |
 | `UCSC_BIGDATA_URL_BASE` | Optional public base URL for custom-track definitions | empty |
+| `DIFFERENTIAL_CONDITION_ORDER` | Optional comma-separated direction/order for universal condition pairs | first samplesheet appearance |
+| `DIFFERENTIAL_MIN_ABS_LOG2FC` | Additional absolute log2-fold-change threshold for significant-site summaries | `0` |
+| `RUN_SIMPLE_PEAK_ANNOTATION` | Add GTF gene context/nearest TSS and consensus annotations | `true` |
+| `RUN_CCRE_ANNOTATION` | Require and add genome-matched cCRE classes; set false for GTF-only annotation | `true` |
+| `PEAK_ANNOTATION_PROMOTER_UPSTREAM` | Bases upstream of TSS in promoter definition | `2000` |
+| `PEAK_ANNOTATION_PROMOTER_DOWNSTREAM` | Bases downstream of TSS in promoter definition | `500` |
 
 #### Deprecated variables (v3.0.x → v3.1.0)
 

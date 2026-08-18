@@ -1,11 +1,34 @@
 # ATACseq2tracks snapshot 3.2.0 update
 
 **Snapshot:** ATACseq2tracks 3.2.0 release candidate  
-**Update date:** 2026-08-13  
-**Scope:** Dual broad- and narrow-peak DESeq2ATAC differential-accessibility analysis
+**Update date:** 2026-08-18  
+**Scope:** Universal multi-condition differential accessibility, pair summaries,
+and GTF/cCRE annotation, retaining dual broad/narrow analysis
 
 The public workflow version remains **3.2.0**. This update extends the prepared
 3.2.0 snapshot and does not create version 3.2.1.
+
+The latest implementation details and validation handoff are in
+[`docs/v3.2.0_UNIVERSAL_DIFFERENTIAL_ANNOTATION_UPDATE_2026-08-18.md`](docs/v3.2.0_UNIVERSAL_DIFFERENTIAL_ANNOTATION_UPDATE_2026-08-18.md).
+
+## Universal comparison extension (2026-08-18)
+
+- Any number and names of conditions are accepted.
+- All non-control biological samples participate in consensus construction.
+- Conditions with fewer than two biological samples are excluded only from
+  statistical models and contrasts.
+- Every pair among eligible conditions is exported from one model per method
+  and peak type.
+- DiffBind broad/narrow, DESeq2ATAC broad/narrow, and peer modules are
+  failure-isolated.
+- Pair-level TSV/HTML reporting distinguishes success, zero-hit, skipped and
+  failed analyses and records both directions of significant-site counts.
+- Built-in GTF/default cCRE annotation is added to shared universes and
+  pair-level result tables.
+- A native-GRCh38 ENCODE4 cCRE download/validation utility installs the default
+  human reference with checksum and provenance metadata; no liftOver is used.
+- Existing safe post-success cleanup is enabled by default; it can be disabled
+  with `ENABLE_AUTOMATIC_CLEANUP=false`, and filtered BAMs remain retained.
 
 ## Implemented changes
 

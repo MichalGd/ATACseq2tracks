@@ -106,13 +106,15 @@
 │
 ├── deseq2atac/
 │   ├── deseq2atac_peak_type_summary.tsv
-│   ├── broad/                         # Independent broad consensus and DESeq2 model
-│   └── narrow/                        # Independent narrow consensus and DESeq2 model
+│   ├── broad/                         # Shared broad universe/model + comparisons/
+│   └── narrow/                        # Shared narrow universe/model + comparisons/
 │
 ├── logs/                              # Batch log files per step
 │
 └── reports/
     ├── ucsc_trackdb.txt
+    ├── differential_accessibility_summary.tsv
+    ├── differential_accessibility_summary.html
     └── pipeline_report_<YYYYMMDD>.html
 ```
 
@@ -176,10 +178,10 @@ See [Downstream: DiffBind](08_diffbind.md).
 
 `deseq2atac/broad/` and `deseq2atac/narrow/` contain separate BED4 consensus
 sets, support tables, raw and normalized count matrices, sample/library metadata,
-DESeq2 size factors, complete and FDR-filtered results, serialized objects,
-session information and paired PNG/PDF diagnostics. The top-level
-`deseq2atac_peak_type_summary.tsv` compares region, tested-site and significant-
-site counts between the two analyses.
+DESeq2 size factors, serialized objects, session information and shared PNG/PDF
+diagnostics. Complete and FDR-filtered result tables and contrast-specific plots
+are under `comparisons/<comparison_id>/`. The top-level
+`deseq2atac_peak_type_summary.tsv` records broad/narrow status and pair counts.
 
 For each peak type, per-sample peaks are canonical/blacklist filtered and reduced,
 then disjoined across samples. Atomic segments supported by at least
@@ -192,8 +194,21 @@ The complete result table preserves independent-filtered `padj=NA` entries. The
 significant table remains a valid header-only compressed table when no region
 passes `DESEQ2ATAC_ALPHA`; this is a successful result, not a workflow failure.
 
-`reports/differential_accessibility_summary.tsv` records tested/significant site
-counts and summary-file paths for the DiffBind and DESeq2ATAC broad/narrow runs.
+All non-control biological samples contribute to each consensus and all-sample
+raw count matrix. Only conditions with at least two biological samples enter the
+model. Every pair among eligible conditions is exported; a singleton condition
+is not compared but still receives all other workflow outputs.
+
+When built-in annotation is enabled, each peak-type directory also contains a
+compressed consensus annotation table; its gene-context, nearest-TSS and
+cCRE fields are joined to pair-level results by default. With
+`RUN_CCRE_ANNOTATION=false`, the tables retain GTF fields without cCRE class
+assignments.
+
+`reports/differential_accessibility_summary.{tsv,html}` records status, tested,
+significant, higher-in-numerator and higher-in-reference counts for every
+method, peak type and condition pair. Counts are not deduplicated loci and should
+not be added across methods or peak types.
 
 ---
 

@@ -234,10 +234,16 @@ See [Downstream: DiffBind](08_diffbind.md) for usage.
 Runs differential accessibility analysis on the prepared DiffBind samplesheets.
 
 - Reads the prefabricated DiffBind CSVs from `diffbind/`
-- Counts reads over peaks using `DiffBind::dba.count(summits=DIFFBIND_SUMMITS)`;
-  the ATAC default is a 100-bp half-width (approximately 201-bp windows)
+- Builds a `minOverlap=2` all-sample consensus with
+  `DiffBind::dba.count(summits=DIFFBIND_SUMMITS)`; the ATAC default is a
+  100-bp half-width (approximately 201-bp windows)
+- Restricts the resulting universe to canonical nuclear chromosomes and removes
+  intervals overlapping the configured genome-matched blacklist
+- Keeps every sample in consensus construction, then recounts model-eligible
+  samples on that fixed universe without a second summit recentering
 - Normalises peak counts through DiffBind and explicitly uses the DESeq2 analysis method
-- Builds contrasts by `Condition`
+- Fits one multi-condition model and exports every pair of conditions having at
+  least two biological samples; singleton conditions are excluded only here
 - Runs `DiffBind::dba.analyze(method = DBA_DESEQ2)` and exports DESeq2 results
 - Generates PCA, heatmap, MA plot, and volcano plot
 - Output: `diffbind_results/<sample_sheet>/`
@@ -258,14 +264,19 @@ peak regions: one broad-peak analysis and one narrow-peak analysis.
   is calculated
 - Counts each PE proper pair once or each SE alignment once
 - Uses raw integer counts and DESeq2 `poscounts` size factors
+- Keeps all samples in consensus construction/raw descriptive counts, fits one
+  model to conditions with at least two biological samples, and exports all pairs
 - Supports an explicitly configured, full-rank block term
+- Adds GTF gene context/nearest TSS and, by default, required genome-matched
+  cCRE annotation; `RUN_CCRE_ANNOTATION=false` selects GTF-only annotation
 - Exports compressed matrices/results and publication-quality PNG/PDF diagnostics
 - Treats zero FDR hits as a successful, explicitly documented result
 - Uses `.checkpoints/step12a.done`, independently of DiffBind Step 12
 - Output: `deseq2atac/broad/`, `deseq2atac/narrow/`, and a peak-type summary
 
-Both differential modules are attempted before a module failure is propagated,
-so a failed analysis cannot erase or prevent preservation of its peer's results.
+Both differential modules and both peak types are attempted before a module
+failure is propagated. Pair-level TSV/HTML reports are generated and cleanup is
+suppressed before a failed run exits.
 
 See [13 — Differential accessibility](13_differential_accessibility.md).
 
@@ -290,7 +301,9 @@ Generates a UCSC Genome Browser trackDb text file pointing to the bigwig files.
 
 Generates a summary HTML report of the full pipeline run.
 
-- Collects output counts, MultiQC paths, QC summary table, and DiffBind CSV paths
+- Collects output counts, MultiQC paths, QC summaries, and all pair-level
+  differential results/statuses
+- Writes `differential_accessibility_summary.tsv` and `.html`
 - Output: `reports/pipeline_report_<YYYYMMDD>.html`
 
 ---

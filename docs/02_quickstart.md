@@ -104,6 +104,7 @@ tail -f /path/to/my_project/run.log
 | DiffBind samplesheets | `analysis/diffbind/` |
 | DiffBind results | `analysis/diffbind_results/` |
 | DESeq2ATAC broad/narrow analyses | `analysis/deseq2atac/{broad,narrow}/` |
+| Pair-level differential summary | `analysis/reports/differential_accessibility_summary.{tsv,html}` |
 | HTML pipeline report | `analysis/reports/pipeline_report_<date>.html` |
 
 ---

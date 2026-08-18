@@ -3,7 +3,7 @@ set -u
 
 status=0
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-for script in atacseq2tracks.sh fastq2tracks.sh scripts/*.sh; do
+for script in atacseq2tracks.sh fastq2tracks.sh scripts/*.sh utilities/*.sh; do
   name=$(basename "$script")
   if [[ "$name" == "readme.2.1.sh" ]]; then
     echo "SKIP $script - change-log note, not runnable shell"
@@ -49,6 +49,13 @@ if bash tests/test_differential_accessibility.sh; then
   echo "OK   differential accessibility regression checks"
 else
   echo "FAIL differential accessibility regression checks"
+  status=1
+fi
+
+if bash tests/test_hg38_ccre_reference.sh; then
+  echo "OK   ENCODE4 hg38 cCRE reference utility checks"
+else
+  echo "FAIL ENCODE4 hg38 cCRE reference utility checks"
   status=1
 fi
 

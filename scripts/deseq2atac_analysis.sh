@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Independent broad- and narrow-consensus DESeq2 differential accessibility wrapper.
+# Independent broad/narrow all-pair DESeq2ATAC analysis wrapper.
 # Usage: deseq2atac_analysis.sh <samplesheet.csv> <bam_dir> <peaks_dir> <out_dir>
-set -euo pipefail
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -n "${F2T_CONFIG:-}" && -f "$F2T_CONFIG" ]]; then
@@ -31,8 +31,18 @@ PY
 )"
 
 case "$GENOME" in
-    hg38) BLACKLIST="${BLACKLIST_HG38:-}" ;;
-    mm39) BLACKLIST="${BLACKLIST_MM39:-}" ;;
+    hg38)
+        BLACKLIST="${BLACKLIST_HG38:-}"
+        GTF="${GTF_HUMAN:-}"
+        CCRE="${CCRE_BED_HG38:-}"
+        CCRE_SOURCE="${CCRE_SOURCE_HG38:-ENCODE4_GRCh38}"
+        ;;
+    mm39)
+        BLACKLIST="${BLACKLIST_MM39:-}"
+        GTF="${GTF_MOUSE:-}"
+        CCRE="${CCRE_BED_MM39:-}"
+        CCRE_SOURCE="${CCRE_SOURCE_MM39:-ENCODE3_mm10_liftOver_mm39}"
+        ;;
     *) echo "ERROR: unsupported genome for DESeq2ATAC: $GENOME" >&2; exit 1 ;;
 esac
 [[ -s "$BLACKLIST" ]] || { echo "ERROR: blacklist missing for $GENOME: $BLACKLIST" >&2; exit 1; }
@@ -41,84 +51,117 @@ MIN_SUPPORT="${DESEQ2ATAC_MIN_SAMPLES:-2}"
 ALPHA="${DESEQ2ATAC_ALPHA:-0.05}"
 BLOCK_COLUMN="${DESEQ2ATAC_BLOCK_COLUMN:-}"
 REFERENCE="${DESEQ2ATAC_REFERENCE_CONDITION:-}"
-
-required_outputs=(
-    deseq2atac_consensus_peaks.bed
-    deseq2atac_consensus_peaks_with_support.tsv.gz
-    deseq2atac_raw_counts.tsv.gz
-    deseq2atac_normalized_counts.tsv.gz
-    deseq2atac_results_all.tsv.gz
-    deseq2atac_results_significant.tsv.gz
-    deseq2atac_sample_metadata.tsv
-    deseq2atac_library_summary.tsv
-    deseq2atac_size_factors.tsv
-    deseq2atac_analysis_object.rds
-    deseq2atac_session_info.txt
-)
+CONDITION_ORDER="${DIFFERENTIAL_CONDITION_ORDER:-}"
+if [[ -n "$CONDITION_ORDER" ]]; then
+    REFERENCE=""
+fi
+MIN_ABS_LOG2FC="${DIFFERENTIAL_MIN_ABS_LOG2FC:-0}"
+ANNOTATE="${RUN_SIMPLE_PEAK_ANNOTATION:-true}"
+CCRE_ANNOTATE="${RUN_CCRE_ANNOTATION:-true}"
+case "$CCRE_ANNOTATE" in
+    true) ;;
+    false) CCRE=""; CCRE_SOURCE="" ;;
+    *) echo "ERROR: RUN_CCRE_ANNOTATION must be true or false" >&2; exit 1 ;;
+esac
+if [[ "$ANNOTATE" == "true" && "$CCRE_ANNOTATE" == "true" && ! -s "$CCRE" ]]; then
+    echo "ERROR: cCRE annotation is enabled but the $GENOME cCRE BED is missing: $CCRE" >&2
+    echo "Set RUN_CCRE_ANNOTATION=false for GTF-only annotation" >&2
+    exit 1
+fi
+PROMOTER_UPSTREAM="${PEAK_ANNOTATION_PROMOTER_UPSTREAM:-2000}"
+PROMOTER_DOWNSTREAM="${PEAK_ANNOTATION_PROMOTER_DOWNSTREAM:-500}"
 
 validate_analysis() {
-    local peak_type="$1" type_out="$2" output stem extension significant_count
+    local peak_type="$1" type_out="$2" status output
     [[ -s "$type_out/deseq2atac_summary.txt" ]] \
-        || { echo "ERROR: DESeq2ATAC $peak_type did not produce its completion summary" >&2; return 1; }
-    grep -q '^Status: SUCCESS$' "$type_out/deseq2atac_summary.txt" \
-        || { echo "ERROR: DESeq2ATAC $peak_type summary does not report success" >&2; return 1; }
-    grep -q "^Peak type: ${peak_type}$" "$type_out/deseq2atac_summary.txt" \
-        || { echo "ERROR: DESeq2ATAC $peak_type summary has the wrong peak type" >&2; return 1; }
+        || { echo "ERROR: DESeq2ATAC $peak_type did not produce a summary" >&2; return 1; }
+    status="$(awk -F': ' '$1=="Status"{print $2; exit}' "$type_out/deseq2atac_summary.txt")"
+    [[ "$status" == "SUCCESS" || "$status" == "SKIPPED" ]] \
+        || { echo "ERROR: DESeq2ATAC $peak_type status is ${status:-missing}" >&2; return 1; }
 
-    for output in "${required_outputs[@]}"; do
+    for output in deseq2atac_consensus_peaks.bed \
+        deseq2atac_consensus_peaks_with_support.tsv.gz \
+        deseq2atac_raw_counts.tsv.gz \
+        deseq2atac_all_sample_metadata.tsv \
+        differential_accessibility_condition_eligibility.tsv \
+        differential_accessibility_comparisons.tsv \
+        deseq2atac_session_info.txt; do
         [[ -s "$type_out/$output" ]] \
-            || { echo "ERROR: DESeq2ATAC $peak_type output missing or empty: $type_out/$output" >&2; return 1; }
+            || { echo "ERROR: DESeq2ATAC $peak_type output missing: $type_out/$output" >&2; return 1; }
     done
-    for output in "$type_out"/*.tsv.gz; do
+    for output in "$type_out"/*.tsv.gz "$type_out"/comparisons/*/*.tsv.gz; do
+        [[ -e "$output" ]] || continue
         gzip -t "$output" \
-            || { echo "ERROR: unreadable compressed DESeq2ATAC $peak_type output: $output" >&2; return 1; }
-    done
-    for stem in library_sizes_and_size_factors sample_correlation sample_distance \
-        pca dispersion_estimates ma volcano; do
-        for extension in png pdf; do
-            [[ -s "$type_out/plots/${stem}.${extension}" ]] \
-                || { echo "ERROR: DESeq2ATAC $peak_type figure missing or empty: ${stem}.${extension}" >&2; return 1; }
-        done
+            || { echo "ERROR: unreadable compressed DESeq2ATAC output: $output" >&2; return 1; }
     done
 
-    significant_count="$(awk -F': ' '$1=="Significant regions"{print $2; exit}' \
-        "$type_out/deseq2atac_summary.txt")"
-    if [[ "${significant_count:-0}" -gt 0 ]]; then
-        [[ -s "$type_out/plots/significant_site_overview.png" && \
-           -s "$type_out/plots/significant_site_overview.pdf" ]] \
-            || { echo "ERROR: DESeq2ATAC $peak_type significant-site overview is missing" >&2; return 1; }
+    if [[ "$status" == "SUCCESS" ]]; then
+        for output in deseq2atac_normalized_counts.tsv.gz deseq2atac_sample_metadata.tsv \
+            deseq2atac_all_sample_metadata.tsv deseq2atac_library_summary.tsv \
+            deseq2atac_size_factors.tsv deseq2atac_analysis_object.rds; do
+            [[ -s "$type_out/$output" ]] \
+                || { echo "ERROR: successful DESeq2ATAC $peak_type output missing: $output" >&2; return 1; }
+        done
+        for stem in library_sizes_and_size_factors sample_correlation sample_distance \
+            pca dispersion_estimates; do
+            for extension in png pdf; do
+                [[ -s "$type_out/plots/${stem}.${extension}" ]] \
+                    || { echo "ERROR: DESeq2ATAC $peak_type figure missing: ${stem}.${extension}" >&2; return 1; }
+            done
+        done
     fi
 }
 
-mkdir -p "$OUT_DIR"
-if [[ -s "$OUT_DIR/deseq2atac_summary.txt" ]]; then
-    echo "WARNING: legacy single-analysis DESeq2ATAC files remain in $OUT_DIR;" \
-         "new broad/narrow results use subdirectories and do not read those files." >&2
-fi
-COMPARISON_SUMMARY="$OUT_DIR/deseq2atac_peak_type_summary.tsv"
-printf 'peak_type\tconsensus_regions\tnonzero_tested_regions\tsignificant_regions\tsummary_file\n' \
-    > "$COMPARISON_SUMMARY"
+write_failure_summary() {
+    local output="$1" peak_type="$2" message="$3"
+    local table="$output/differential_accessibility_comparisons.tsv"
+    [[ -s "$table" ]] && return
+    printf 'module\tpeak_type\tcomparison_id\tnumerator\treference\tnumerator_replicates\treference_replicates\tconsensus_regions\ttested_sites\tsignificant_sites\thigher_in_numerator\thigher_in_reference\talpha\tmin_abs_log2fc\tstatus\tresults_all\tresults_significant\tsummary_file\tmessage\n' > "$table"
+    printf 'DESeq2ATAC\t%s\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\t%s\t%s\tFAILED\tNA\tNA\t%s\t%s\n' \
+        "$peak_type" "$ALPHA" "$MIN_ABS_LOG2FC" \
+        "$output/deseq2atac_summary.txt" "$message" >> "$table"
+}
 
+mkdir -p "$OUT_DIR"
+PEAK_TYPE_SUMMARY="$OUT_DIR/deseq2atac_peak_type_summary.tsv"
+printf 'peak_type\tstatus\tconsensus_regions\tplanned_comparisons\tsuccessful_comparisons\tfailed_comparisons\tsummary_file\n' \
+    > "$PEAK_TYPE_SUMMARY"
+
+failures=0
 for PEAK_TYPE in broad narrow; do
     TYPE_OUT="$OUT_DIR/$PEAK_TYPE"
     mkdir -p "$TYPE_OUT"
-    echo "=== Running DESeq2ATAC with ${PEAK_TYPE} peaks ==="
-    "$R_CMD" "$SCRIPT_DIR/deseq2atac_analysis.R" \
+    echo "=== Running DESeq2ATAC with ${PEAK_TYPE} peaks (all eligible condition pairs) ==="
+    if ! "$R_CMD" "$SCRIPT_DIR/deseq2atac_analysis.R" \
         "$SAMPLESHEET" "$BAM_DIR" "$PEAKS_DIR" "$TYPE_OUT" \
         "$GENOME" "$BLACKLIST" "$MIN_SUPPORT" "$ALPHA" \
-        "$BLOCK_COLUMN" "$REFERENCE" "${MIN_MAPQ:-30}" "$PEAK_TYPE"
-    validate_analysis "$PEAK_TYPE" "$TYPE_OUT"
+        "$BLOCK_COLUMN" "$REFERENCE" "${MIN_MAPQ:-30}" "$PEAK_TYPE" \
+        "$CONDITION_ORDER" "$MIN_ABS_LOG2FC" "$ANNOTATE" "$GTF" "$CCRE" \
+        "$CCRE_SOURCE" "$PROMOTER_UPSTREAM" "$PROMOTER_DOWNSTREAM"; then
+        echo "ERROR: DESeq2ATAC $PEAK_TYPE failed; the other peak type remains eligible to run" >&2
+        write_failure_summary "$TYPE_OUT" "$PEAK_TYPE" \
+            "DESeq2ATAC model or export failed; inspect the R error output"
+        failures=$((failures + 1))
+        printf '%s\tFAILED\tNA\tNA\tNA\tNA\t%s\n' \
+            "$PEAK_TYPE" "$TYPE_OUT/deseq2atac_summary.txt" >> "$PEAK_TYPE_SUMMARY"
+        continue
+    fi
+    if ! validate_analysis "$PEAK_TYPE" "$TYPE_OUT"; then
+        write_failure_summary "$TYPE_OUT" "$PEAK_TYPE" "DESeq2ATAC output validation failed"
+        failures=$((failures + 1))
+        printf '%s\tFAILED_VALIDATION\tNA\tNA\tNA\tNA\t%s\n' \
+            "$PEAK_TYPE" "$TYPE_OUT/deseq2atac_summary.txt" >> "$PEAK_TYPE_SUMMARY"
+        continue
+    fi
 
-    consensus_count="$(awk -F': ' '$1=="Consensus regions"{print $2; exit}' \
-        "$TYPE_OUT/deseq2atac_summary.txt")"
-    tested_count="$(awk -F': ' '$1=="Nonzero tested regions"{print $2; exit}' \
-        "$TYPE_OUT/deseq2atac_summary.txt")"
-    significant_count="$(awk -F': ' '$1=="Significant regions"{print $2; exit}' \
-        "$TYPE_OUT/deseq2atac_summary.txt")"
-    printf '%s\t%s\t%s\t%s\t%s\n' "$PEAK_TYPE" "${consensus_count:-NA}" \
-        "${tested_count:-NA}" "${significant_count:-NA}" \
-        "$TYPE_OUT/deseq2atac_summary.txt" >> "$COMPARISON_SUMMARY"
+    status="$(awk -F': ' '$1=="Status"{print $2; exit}' "$TYPE_OUT/deseq2atac_summary.txt")"
+    consensus="$(awk -F': ' '$1=="Consensus regions"{print $2; exit}' "$TYPE_OUT/deseq2atac_summary.txt")"
+    planned="$(awk -F': ' '$1=="Planned pairwise comparisons"{print $2; exit}' "$TYPE_OUT/deseq2atac_summary.txt")"
+    successful="$(awk -F': ' '$1=="Successful comparisons"{print $2; exit}' "$TYPE_OUT/deseq2atac_summary.txt")"
+    failed="$(awk -F': ' '$1=="Failed comparisons"{print $2; exit}' "$TYPE_OUT/deseq2atac_summary.txt")"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$PEAK_TYPE" "$status" \
+        "${consensus:-NA}" "${planned:-0}" "${successful:-0}" "${failed:-0}" \
+        "$TYPE_OUT/deseq2atac_summary.txt" >> "$PEAK_TYPE_SUMMARY"
 done
 
-[[ -s "$COMPARISON_SUMMARY" ]] \
-    || { echo "ERROR: DESeq2ATAC peak-type summary was not created" >&2; exit 1; }
+(( failures == 0 )) || exit 1

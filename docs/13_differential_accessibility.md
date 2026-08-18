@@ -7,6 +7,37 @@ share filtered BAMs and sample metadata but construct and analyse their regions
 separately. Agreement is useful sensitivity evidence; disagreement is not, by
 itself, proof that either method failed.
 
+## Universal condition and replicate policy
+
+The condition names and their number are data-driven; names such as `stem`,
+`prolif`, `Day4`, and `Day7` are examples only. For each method and peak type:
+
+1. all non-control biological samples participate in all-sample consensus-peak
+   construction, including samples from conditions represented only once;
+2. a condition enters the statistical model only when it has at least two
+   biological samples after technical rows are collapsed;
+3. one multi-condition model is fitted across all eligible conditions;
+4. every unordered pair of eligible conditions is extracted as a named contrast.
+
+Thus, `k` eligible conditions produce `k * (k - 1) / 2` comparisons. A condition
+with one sample still receives all upstream processing, peaks, tracks, QC and a
+place in the consensus universe, but it is not used to estimate differential
+model normalization, dispersion or contrasts. When fewer than two conditions
+are eligible, differential testing is reported as `SKIPPED`, not failed.
+
+By default, condition order follows first appearance in the samplesheet. For
+each pair, the later condition is the numerator and the earlier condition is the
+reference. Set a full or partial comma-separated order when a specific direction
+is required:
+
+```bash
+DIFFERENTIAL_CONDITION_ORDER="stem,prolif,Day4,Day7"
+DIFFERENTIAL_MIN_ABS_LOG2FC=0
+```
+
+The summary always records numerator, reference and replicate counts; condition
+names are never inferred from a fixed list.
+
 ## DiffBind
 
 Steps 11 and 12 prepare narrow and broad DiffBind sample sheets and run a
@@ -20,18 +51,29 @@ This passes `summits=100` to `DiffBind::dba.count()` and produces approximately
 201-bp summit-centred counting windows. Set `DIFFBIND_SUMMITS=200` to reproduce
 the previous approximately 401-bp behavior.
 
-This update does not silently change DiffBind's existing normalization, contrast
-or FDR behavior; only the summit width is newly configured.
+DiffBind first calls `dba.count(minOverlap=2, summits=...)` with every valid
+biological sample. The resulting consensus is restricted to canonical autosomes
+and X/Y and intervals overlapping the configured blacklist are removed. DiffBind
+then recounts only model-eligible samples on that fixed, already recentered
+all-sample consensus with `summits=FALSE` and `filter=0`. This keeps
+singleton-condition samples in consensus construction without putting them in
+the statistical model. Explicit `~Condition` contrasts are added for every
+eligible pair and one DESeq2-backed DiffBind analysis is run per peak type.
 
 DiffBind outputs remain under:
 
 ```text
 diffbind/
 diffbind_results/<diffbind_samplesheet>/
+|-- diffbind_consensus_peaks.bed
+|-- differential_accessibility_condition_eligibility.tsv
+|-- differential_accessibility_comparisons.tsv
+`-- comparisons/<comparison_id>/
 ```
 
-Each analysis exports all tested sites, the FDR 0.05 subset, its serialized
-DiffBind object, summary text, and PCA, heatmap, MA and volcano plots.
+Each comparison exports all tested sites, the significant subset, summary/status
+text, and PCA, heatmap, MA and volcano plots. `DIFFBIND_ALPHA=0.05` is the
+default. Root-level two-condition result names are retained for compatibility.
 
 ## DESeq2ATAC
 
@@ -52,7 +94,8 @@ The following procedure is run separately for broad and narrow peaks:
 1. Collapse technical rows to distinct biological sample keys defined as
    `sample_id + replicate`.
 2. Import the corresponding per-replicate MACS3 peak file for every non-control
-   biological sample. Pooled-condition peak calls are not used.
+   biological sample, irrespective of differential-model eligibility.
+   Pooled-condition peak calls are not used.
 3. Retain canonical autosomes and X/Y, harmonize chromosome naming, remove every
    peak overlapping the configured blacklist, and reduce overlapping peaks
    within each sample.
@@ -79,9 +122,10 @@ the whole cohort and is not a formal within-condition reproducibility or IDR tes
 Broad consensus regions retain supported broad-peak boundaries and may therefore
 be long and variable in width. Narrow consensus regions retain supported
 narrowPeak-derived boundaries; they are not recentered to a fixed summit window.
-After consensus construction, the module counts raw overlaps with
+After consensus construction, the module counts raw overlaps for all samples with
 `GenomicAlignments::summarizeOverlaps()`, fits DESeq2 to non-negative integer
-counts and writes complete and FDR-filtered results.
+counts from model-eligible samples, and writes complete and FDR-filtered results
+for every eligible condition pair.
 
 Paired-end input uses strict `GAlignmentPairs` counting: each valid proper pair
 is one fragment. Single-end input counts each retained alignment once. The
@@ -103,9 +147,9 @@ both peak types exist. Preflight rejects incompatible runs before processing.
 
 ### How this differs from DiffBind consensus construction
 
-DiffBind also analyzes narrow and broad input peak sets separately and, because
-the workflow does not override `minOverlap`, uses the DiffBind default support
-of two peak sets. It then calls `dba.count(summits=100)`, finds a consensus
+DiffBind also analyzes narrow and broad input peak sets separately and explicitly
+uses `minOverlap=2`, equivalent to support from two peak sets. It then calls
+`dba.count(summits=100)`, finds a consensus
 summit from read pileup and recenters every retained site to a fixed 201-bp
 window, as defined by the
 [DiffBind `dba.count` documentation](https://bioconductor.org/packages/release/bioc/manuals/DiffBind/man/DiffBind.pdf).
@@ -126,10 +170,12 @@ DESEQ2ATAC_BLOCK_COLUMN=""
 DESEQ2ATAC_REFERENCE_CONDITION=""
 ```
 
-The model is `~ condition`. Exactly two conditions and at least two biological
-replicates per condition are currently required, matching the supported
-DiffBind comparison. When the reference is empty, the alphabetically first
-condition is the denominator; the summary records the direction explicitly.
+The model is `~ condition` and supports any number of eligible conditions. One
+model is fitted per broad/narrow universe and all pairwise contrasts are then
+extracted from it. DESeq2 size factors and dispersion estimates use eligible
+samples only; consensus support and the all-sample raw matrix use every sample.
+`DESEQ2ATAC_REFERENCE_CONDITION` is retained for backward compatibility and,
+when set, moves that condition to the start of the universal condition order.
 
 Set `DESEQ2ATAC_BLOCK_COLUMN` only for a real paired or batch variable present
 in the samplesheet. The module verifies that `~ block + condition` is full rank
@@ -151,29 +197,78 @@ deseq2atac/
 |   |-- deseq2atac_consensus_peaks_with_support.tsv.gz
 |   |-- deseq2atac_raw_counts.tsv.gz
 |   |-- deseq2atac_normalized_counts.tsv.gz
-|   |-- deseq2atac_results_all.tsv.gz
-|   |-- deseq2atac_results_significant.tsv.gz
+|   |-- differential_accessibility_condition_eligibility.tsv
+|   |-- differential_accessibility_comparisons.tsv
 |   |-- deseq2atac_summary.txt
-|   `-- plots/*.png and plots/*.pdf
+|   |-- plots/*.png and plots/*.pdf
+|   `-- comparisons/<comparison_id>/
+|       |-- deseq2atac_results_all.tsv.gz
+|       |-- deseq2atac_results_significant.tsv.gz
+|       |-- deseq2atac_summary.txt
+|       `-- plots/*.{png,pdf}
 `-- narrow/
-    |-- deseq2atac_consensus_peaks.bed
-    |-- deseq2atac_consensus_peaks_with_support.tsv.gz
-    |-- deseq2atac_raw_counts.tsv.gz
-    |-- deseq2atac_normalized_counts.tsv.gz
-    |-- deseq2atac_results_all.tsv.gz
-    |-- deseq2atac_results_significant.tsv.gz
-    |-- deseq2atac_summary.txt
-    `-- plots/*.png and plots/*.pdf
+    `-- (same shared-universe and per-comparison layout)
 ```
 
 Each peak-type directory also contains sample/library metadata, size factors,
 the serialized DESeq2 object, session information, and the full diagnostic set:
 library-size, correlation, distance, PCA, dispersion, MA and volcano PNG/PDF
-pairs. A significant-site overview is present only when significant sites exist.
+pairs. Shared PCA/correlation/dispersion plots use all model-eligible samples;
+MA, volcano and significant-site plots are contrast-specific.
 
 Each significant table is a valid compressed table with a header even when it
 has zero rows. A zero-hit broad or narrow analysis exits successfully and states
-this explicitly in its own `deseq2atac_summary.txt`.
+this explicitly in its comparison summary.
+
+## Built-in peak annotation
+
+`RUN_SIMPLE_PEAK_ANNOTATION=true` annotates the shared broad and narrow universes
+once and joins those columns to every complete and significant result table. It
+does not replace the separate optional HOMER motif/annotation module.
+
+The configured GTF supplies:
+
+- primary gene context: `promoter`, `exon`, `intron`, `other_gene_body`, or
+  `distal_intergenic`;
+- non-exclusive promoter, exon, intron and gene-body overlap flags;
+- nearest gene ID/name and strand-aware signed distance to its TSS.
+
+Promoters default to 2,000 bp upstream and 500 bp downstream of the TSS and are
+configurable with `PEAK_ANNOTATION_PROMOTER_UPSTREAM` and
+`PEAK_ANNOTATION_PROMOTER_DOWNSTREAM`. Here, `intron` means gene-body sequence
+not covered by an annotated exon or promoter; the exact GTF version is therefore
+part of the result provenance.
+
+By default, the required matching cCRE BED adds all overlapping cCRE IDs/classes,
+a deterministic primary element selected by greatest overlap, and
+`enhancer_like=true` for pELS/dELS overlaps. These are reference-based regulatory
+annotations, not proof of enhancer activity in the assayed cells.
+
+Recommended reference provenance:
+
+- hg38: native ENCODE4 expanded Registry of cCREs, GRCh38; Moore JE, Pratt HE,
+  Fan K, et al., [*Nature* (2026)](https://www.nature.com/articles/s41586-025-09909-9),
+  DOI `10.1038/s41586-025-09909-9`;
+- mm39: the same resource-building approach as
+  [`MichalGd/ATAC-seq/utilitiies/creating_ENCODE_cCRES_mm39_bigBed_track.sh`](https://github.com/MichalGd/ATAC-seq/blob/main/utilitiies/creating_ENCODE_cCRES_mm39_bigBed_track.sh),
+  namely ENCODE3 mm10 `encodeCcreCombined` lifted to mm39. Record the source as
+  `ENCODE3_mm10_liftOver_mm39`; it is not a native ENCODE4 mm39 registry.
+
+The human and mouse resources use different registry generations and must not
+be compared as if their class counts were directly equivalent. Configure:
+
+```bash
+RUN_CCRE_ANNOTATION=true
+CCRE_BED_HG38="/home/micgdu/Analysis/utilities/UCSC/CREs/human/hg38/Supplementary-Data-1.GRCh38-cCREs-V4.bed.gz"
+CCRE_SOURCE_HG38="ENCODE4_GRCh38_2026"
+CCRE_BED_MM39="/home/micgdu/Analysis/utilities/UCSC/CREs/mouse/mm39/encodeCcreCombined_mm39_sorted.bed"
+CCRE_SOURCE_MM39="ENCODE3_mm10_liftOver_mm39"
+```
+
+With the default `RUN_CCRE_ANNOTATION=true`, an empty, missing or malformed cCRE
+BED is a preflight failure. Set `RUN_CCRE_ANNOTATION=false` explicitly to run
+GTF-only annotation; all consensus peaks still receive gene context and nearest
+TSS fields.
 
 ## Counts versus visualization tracks
 
@@ -187,8 +282,12 @@ same region length for a given row and DESeq2 models raw counts.
 
 DiffBind uses `.checkpoints/step12.done`; DESeq2ATAC uses
 `.checkpoints/step12a.done`. The workflow attempts both peer modules even if one
-fails, retains successful outputs, and exits non-zero after both attempts when a
-failure occurred.
+fails; broad and narrow wrappers also continue independently. Browser metadata
+and the pair-level TSV/HTML report are generated before a failed run exits.
+Automatic cleanup is suppressed on failure. Individual comparison status files
+distinguish `SUCCESS`, `SKIPPED`, and `FAILED`; zero significant sites is
+`SUCCESS`. The current checkpoint granularity remains per module rather than per
+contrast, so rerunning a failed module refits its model and rewrites comparisons.
 
 To rerun only DESeq2ATAC:
 
@@ -208,9 +307,7 @@ bash scripts/deseq2atac_analysis.sh \
     /path/to/output/deseq2atac
 ```
 
-The wrapper always runs `broad` and `narrow`. The underlying R script retains an
-optional final `broad|narrow` argument for focused testing; when omitted it
-defaults to `broad` for compatibility with the preceding DESeq2ATAC update.
+The wrapper always runs `broad` and `narrow`; each peak type is failure-isolated.
 
 ## Interpretation
 

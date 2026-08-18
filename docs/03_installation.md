@@ -50,6 +50,13 @@ R and Bioconductor are required for DESeq2 consensus-peak size factors in Step
 10, DiffBind in Steps 11–12, and DESeq2ATAC in Step 12a. ChIPQC and HTSeq are
 not required.
 
+The built-in GTF/cCRE peak annotation uses the already required
+`GenomicRanges` and `rtracklayer` packages; this update adds no R or Python
+package dependency. cCRE BED files are default-required reference data
+configured per genome, not software packages. Set
+`RUN_CCRE_ANNOTATION=false` only when GTF-only annotation is intentionally
+required on a server where the cCRE reference is unavailable.
+
 ```r
 # Install Bioconductor manager if needed
 if (!require("BiocManager")) install.packages("BiocManager")

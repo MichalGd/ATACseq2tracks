@@ -256,8 +256,8 @@ else
 fi
 
 (( DIFFERENTIAL_ANALYSIS_FAILURES == 0 )) || {
-    echo "ERROR: ${DIFFERENTIAL_ANALYSIS_FAILURES} differential-accessibility module(s) failed" >&2
-    exit 1
+    echo "WARNING: ${DIFFERENTIAL_ANALYSIS_FAILURES} differential-accessibility module(s) failed; continuing through reporting" >&2
+    rm -f "${CHECKPOINT_DIR}/step14.done"
 }
 
 # ── Step 13: UCSC tracks ──────────────────────────────────────────────────────
@@ -288,18 +288,28 @@ if is_done 14; then skip_msg 14; else
     echo "=== [14] Pipeline report ==="
     bash "${SCRIPT_DIR}/generate_pipeline_report.sh" "$OUTPUT_DIR" \
         "${OUTPUT_DIR}/reports/pipeline_report_$(date +%Y%m%d)" html
-    mark_done 14
+    if (( DIFFERENTIAL_ANALYSIS_FAILURES == 0 )); then
+        mark_done 14
+    else
+        echo "WARNING: Step 14 report was written but not checkpointed because differential analysis failed" >&2
+    fi
 fi
 
+(( DIFFERENTIAL_ANALYSIS_FAILURES == 0 )) || {
+    echo "ERROR: ${DIFFERENTIAL_ANALYSIS_FAILURES} differential-accessibility module(s) failed" >&2
+    echo "ERROR: reports were generated and automatic cleanup was suppressed" >&2
+    exit 1
+}
+
 # ── Cleanup ───────────────────────────────────────────────────────────────────
-if [[ "${ENABLE_AUTOMATIC_CLEANUP:-false}" == "true" ]]; then
+if [[ "${ENABLE_AUTOMATIC_CLEANUP:-true}" == "true" ]]; then
 [[ "${KEEP_INTERMEDIATE_BAMS:-false}" == "false" ]] && \
     rm -f "${OUTPUT_DIR}/bams/"*.bam "${OUTPUT_DIR}/bams/"*.bai 2>/dev/null || true
 [[ "${KEEP_TRIMMED_FASTQ:-false}" == "false" ]] && \
     rm -f "${OUTPUT_DIR}/trimmedFastq/"*.gz 2>/dev/null || true
 [[ "${KEEP_DEDUP_BAMS:-false}" == "false" ]] && \
     rm -f "${OUTPUT_DIR}/dedupBams/"*.bam "${OUTPUT_DIR}/dedupBams/"*.bai 2>/dev/null || true
-[[ "${KEEP_FILTERED_BAMS:-false}" == "false" ]] && \
+[[ "${KEEP_FILTERED_BAMS:-true}" == "false" ]] && \
     rm -f "${OUTPUT_DIR}/filteredBams/"*.bam "${OUTPUT_DIR}/filteredBams/"*.bai 2>/dev/null || true
 [[ "${KEEP_RAW_BEDGRAPH:-false}" == "false" ]] && \
     rm -f "${OUTPUT_DIR}/bedGraph/"*.bedGraph.gz 2>/dev/null || true
