@@ -279,23 +279,27 @@ failure is propagated. Pair-level TSV/HTML reports are generated and cleanup is
 suppressed before a failed run exits.
 
 See [13 — Differential accessibility](13_differential_accessibility.md).
+See [16 — Peak annotation](16_peak_annotation.md) for the annotation columns,
+category precedence, cCRE sources and interpretation limits.
 
 ---
 
-## Step 13 — UCSC track hub
+## Step 13 — UCSC track definitions
 
 **Script:** `scripts/create_ucsc_tracks.sh`
 
-Generates a UCSC Genome Browser trackDb text file pointing to the bigwig files.
+Generates UCSC Genome Browser custom-track definitions for every bigWig family.
 
-- Scans `bigwig/` and `bigwig_merged/`
-- Output: `reports/ucsc_trackdb.txt`
+- Processes `bigwig/`, `bigwig_deseq2_consensus/`,
+  `bigwig_deseq2_robust_cpm/`, and `bigwig_merged/` when each directory contains
+  bigWigs
+- Output: `ucsc_tracks.txt` inside each processed bigWig directory
 
 > You must serve the bigwig files on a web server and configure the base URL in `config.conf` before loading the trackdb into UCSC.
 
 ---
 
-## Step 13 — Pipeline report
+## Step 14 — Pipeline report
 
 **Script:** `scripts/generate_pipeline_report.sh`
 
@@ -305,6 +309,19 @@ Generates a summary HTML report of the full pipeline run.
   differential results/statuses
 - Writes `differential_accessibility_summary.tsv` and `.html`
 - Output: `reports/pipeline_report_<YYYYMMDD>.html`
+
+---
+
+## Post-success cleanup
+
+Cleanup is not a checkpointed analysis step. With the default
+`ENABLE_AUTOMATIC_CLEANUP=true`, it runs only after Steps 13 and 14 complete and
+all enabled differential modules have returned successfully. The default `KEEP_*`
+policy deletes pre-dedup BAMs, trimmed FASTQs, pre-blacklist deduplicated BAMs
+and raw bedGraphs, while retaining filtered quantitative BAMs and every final
+track, peak, QC, differential result and report. A failed differential module
+still permits reporting, then causes a non-zero exit before cleanup. Set
+`ENABLE_AUTOMATIC_CLEANUP=false` to retain all intermediates.
 
 ---
 

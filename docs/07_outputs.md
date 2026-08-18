@@ -38,18 +38,22 @@
 │   └── <sample_id>_bioR<N>_dedup_blFilt.bam
 │
 ├── bigwig/                            # Per-replicate fragment/read CPM bigWigs
-│   └── <sample_id>_bioR<N>_dedup_blFilt_CPM.bw
+│   ├── <sample_id>_bioR<N>_dedup_blFilt_CPM.bw
+│   └── ucsc_tracks.txt
 │
 ├── bigwig_deseq2_consensus/           # Reciprocal-size-factor coverage
 │   ├── <sample_id>_bioR<N>_dedup_blFilt_DESeq2Consensus.bw
-│   └── <sample_id>_bioR<N>_dedup_blFilt_DESeq2Consensus.bedGraph
+│   ├── <sample_id>_bioR<N>_dedup_blFilt_DESeq2Consensus.bedGraph
+│   └── ucsc_tracks.txt
 │
 ├── bigwig_deseq2_robust_cpm/          # DESeq2 robust CPM/FPM-style coverage
 │   ├── <sample_id>_bioR<N>_dedup_blFilt_DESeq2RobustCPM.bw
-│   └── <sample_id>_bioR<N>_dedup_blFilt_DESeq2RobustCPM.bedGraph
+│   ├── <sample_id>_bioR<N>_dedup_blFilt_DESeq2RobustCPM.bedGraph
+│   └── ucsc_tracks.txt
 │
 ├── bigwig_merged/                     # Condition-group merged bigwig tracks
-│   └── <factor>_<condition>_<treatment>_<cell_type>_merged_CPM.bw
+│   ├── <factor>_<condition>_<treatment>_<cell_type>_merged_CPM.bw
+│   └── ucsc_tracks.txt
 │
 ├── peaks/
 │   ├── per_replicate/
@@ -104,6 +108,10 @@
 │   ├── diffbind_samplesheet_hg38_broad.csv
 │   └── (mm39 equivalents if applicable)
 │
+├── diffbind_results/
+│   ├── diffbind_samplesheet_<genome>_narrow/  # Shared universe/model + comparisons/
+│   └── diffbind_samplesheet_<genome>_broad/   # Shared universe/model + comparisons/
+│
 ├── deseq2atac/
 │   ├── deseq2atac_peak_type_summary.tsv
 │   ├── broad/                         # Shared broad universe/model + comparisons/
@@ -112,7 +120,6 @@
 ├── logs/                              # Batch log files per step
 │
 └── reports/
-    ├── ucsc_trackdb.txt
     ├── differential_accessibility_summary.tsv
     ├── differential_accessibility_summary.html
     └── pipeline_report_<YYYYMMDD>.html
@@ -204,6 +211,9 @@ compressed consensus annotation table; its gene-context, nearest-TSS and
 cCRE fields are joined to pair-level results by default. With
 `RUN_CCRE_ANNOTATION=false`, the tables retain GTF fields without cCRE class
 assignments.
+
+See [Peak annotation](16_peak_annotation.md) for every column, gene-context
+precedence, primary-cCRE selection, source provenance and interpretation limits.
 
 `reports/differential_accessibility_summary.{tsv,html}` records status, tested,
 significant, higher-in-numerator and higher-in-reference counts for every

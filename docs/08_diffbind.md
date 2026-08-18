@@ -78,9 +78,10 @@ dba.plotVolcano(dba)
 
 ## Automated DiffBind analysis
 
-A new optional pipeline stage runs DiffBind directly on the prepared samplesheets.
+Steps 11 and 12 run DiffBind directly on the prepared samplesheets.
 
 ```bash
+export F2T_CONFIG=/absolute/path/to/config.conf
 bash scripts/diffbind_analysis.sh diffbind diffbind_results
 ```
 
@@ -95,11 +96,14 @@ layout is:
 ```text
 diffbind_results/diffbind_samplesheet_<genome>_<broad|narrow>/
 |-- diffbind_consensus_peaks.bed
+|-- diffbind_consensus_peak_annotations.tsv.gz
 |-- differential_accessibility_condition_eligibility.tsv
 |-- differential_accessibility_comparisons.tsv
 `-- comparisons/<comparison_id>/
     |-- diffbind_results_all_sites.csv
     |-- diffbind_results.csv
+    |-- diffbind_significant_sites.bed
+    |-- annotation_summary.tsv
     |-- diffbind_summary.txt
     `-- diffbind_{pca,heatmap,ma,volcano}.png
 ```
@@ -115,3 +119,5 @@ approximately 201-bp summit-centred window. Set `DIFFBIND_SUMMITS=200` in the
 configuration to reproduce the previous approximately 401-bp behavior. The
 independent broad- and narrow-consensus DESeq2ATAC peer module is documented in
 [Differential accessibility](13_differential_accessibility.md).
+Annotation columns and reference provenance are documented in
+[Peak annotation](16_peak_annotation.md).

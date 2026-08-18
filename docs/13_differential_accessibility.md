@@ -226,36 +226,11 @@ this explicitly in its comparison summary.
 once and joins those columns to every complete and significant result table. It
 does not replace the separate optional HOMER motif/annotation module.
 
-The configured GTF supplies:
-
-- primary gene context: `promoter`, `exon`, `intron`, `other_gene_body`, or
-  `distal_intergenic`;
-- non-exclusive promoter, exon, intron and gene-body overlap flags;
-- nearest gene ID/name and strand-aware signed distance to its TSS.
-
-Promoters default to 2,000 bp upstream and 500 bp downstream of the TSS and are
-configurable with `PEAK_ANNOTATION_PROMOTER_UPSTREAM` and
-`PEAK_ANNOTATION_PROMOTER_DOWNSTREAM`. Here, `intron` means gene-body sequence
-not covered by an annotated exon or promoter; the exact GTF version is therefore
-part of the result provenance.
-
-By default, the required matching cCRE BED adds all overlapping cCRE IDs/classes,
-a deterministic primary element selected by greatest overlap, and
-`enhancer_like=true` for pELS/dELS overlaps. These are reference-based regulatory
-annotations, not proof of enhancer activity in the assayed cells.
-
-Recommended reference provenance:
-
-- hg38: native ENCODE4 expanded Registry of cCREs, GRCh38; Moore JE, Pratt HE,
-  Fan K, et al., [*Nature* (2026)](https://www.nature.com/articles/s41586-025-09909-9),
-  DOI `10.1038/s41586-025-09909-9`;
-- mm39: the same resource-building approach as
-  [`MichalGd/ATAC-seq/utilitiies/creating_ENCODE_cCRES_mm39_bigBed_track.sh`](https://github.com/MichalGd/ATAC-seq/blob/main/utilitiies/creating_ENCODE_cCRES_mm39_bigBed_track.sh),
-  namely ENCODE3 mm10 `encodeCcreCombined` lifted to mm39. Record the source as
-  `ENCODE3_mm10_liftOver_mm39`; it is not a native ENCODE4 mm39 registry.
-
-The human and mouse resources use different registry generations and must not
-be compared as if their class counts were directly equivalent. Configure:
+The GTF supplies a precedence-based promoter/exon/intron/intergenic context,
+non-exclusive overlap flags, nearest gene and signed TSS distance. The matching
+cCRE BED adds every overlapping ID/class, a deterministic primary cCRE and an
+`enhancer_like` flag for pELS/dELS overlaps. These are reference annotations,
+not proof of regulatory activity or enhancer-to-gene links. Configure:
 
 ```bash
 RUN_CCRE_ANNOTATION=true
@@ -265,10 +240,14 @@ CCRE_BED_MM39="/home/micgdu/Analysis/utilities/UCSC/CREs/mouse/mm39/encodeCcreCo
 CCRE_SOURCE_MM39="ENCODE3_mm10_liftOver_mm39"
 ```
 
-With the default `RUN_CCRE_ANNOTATION=true`, an empty, missing or malformed cCRE
-BED is a preflight failure. Set `RUN_CCRE_ANNOTATION=false` explicitly to run
-GTF-only annotation; all consensus peaks still receive gene context and nearest
-TSS fields.
+With the default `RUN_CCRE_ANNOTATION=true`, a missing/empty reference, unreadable
+gzip stream or file without a valid BED interval is a preflight failure. Set
+`RUN_CCRE_ANNOTATION=false` explicitly to run GTF-only annotation; all consensus
+peaks still receive gene context and nearest TSS fields.
+
+See [Peak annotation](16_peak_annotation.md) for the exact precedence rules,
+column definitions, multiple-overlap and primary-cCRE logic, ENCODE class
+meanings, human and mouse resource construction, provenance and limitations.
 
 ## Counts versus visualization tracks
 

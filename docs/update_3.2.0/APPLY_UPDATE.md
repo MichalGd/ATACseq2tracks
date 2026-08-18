@@ -1,21 +1,28 @@
 # Applying the ATACseq2tracks 3.2.0 repository update
 
-This directory is a complete, reviewable repository snapshot based on the current GitHub `main` branch plus the proposed 3.2.0 update. It contains no `.git` directory and has not modified either local source clone or the GitHub repository.
+The prepared directory
+`development/ATACseq2tracks_v3.2.0_universal_multicondition_annotation_update_2026-08-18`
+is the complete cumulative review snapshot. It has no `.git` directory and does
+not modify a local clone or the public repository by itself. The public `main`
+branch may still represent an earlier 3.2.0 state, so compare the complete trees
+rather than assuming matching version labels imply matching contents.
 
 ## Safe update procedure
 
 1. Select one canonical Git clone. Do not maintain both local duplicate clones independently.
-2. Create a review branch and confirm the worktree has no unrelated changes to files in the update manifest.
+2. Create a review branch and confirm the worktree has no unrelated changes.
 3. Compare the canonical clone with this prepared snapshot.
 4. Copy or merge files on the review branch. Do not blindly overwrite an active, site-specific project configuration.
-5. Remove the four obsolete scripts listed in `UPDATE_MANIFEST.md` only after confirming no external job calls them.
+5. Review additions, replacements and deletions from the current tree comparison;
+   the 2026-08-02 manifest is a historical baseline, not a complete list of the
+   later cumulative updates.
 6. Create the Conda environment, run static checks and complete a representative acceptance run before merging or tagging.
 
 Example comparison from the shared workspace:
 
 ```powershell
-git -C fastq2tracks.2.1 status --short
-git diff --no-index fastq2tracks.2.1 development\ATACseq2tracks_repository_update_3.2.0
+git -C D:\bioinformatics\github\ATACseq2tracks status --short
+git diff --no-index D:\bioinformatics\github\ATACseq2tracks D:\bioinformatics\ATAC_VCS\development\ATACseq2tracks_v3.2.0_universal_multicondition_annotation_update_2026-08-18
 ```
 
 On Linux, restore executable bits:
@@ -30,6 +37,8 @@ Set or verify:
 
 - `SAMPLESHEET`, `OUTPUT_DIR`;
 - Bowtie2 index, chromosome sizes, GTF and blacklist paths for the single genome in the run;
+- the matching cCRE BED and source label, unless
+  `RUN_CCRE_ANNOTATION=false` is deliberately selected for GTF-only annotation;
 - optionally `TSS_BED_HG38` or `TSS_BED_MM39`; otherwise TSS BED is generated from GTF;
 - `PICARD_JAR`, `PICARD_TMP` and `BEDGRAPH_TO_BIGWIG`;
 - `UCSC_BIGDATA_URL_BASE` when tracks must be loaded directly by UCSC;
@@ -50,6 +59,8 @@ DESEQ2ATAC_MIN_SAMPLES=2
 DESEQ2ATAC_ALPHA=0.05
 DESEQ2ATAC_BLOCK_COLUMN=""
 DESEQ2ATAC_REFERENCE_CONDITION=""
+RUN_SIMPLE_PEAK_ANNOTATION=true
+RUN_CCRE_ANNOTATION=true
 RUN_ATAQV_QC=true
 GENERATE_ATAQV_VIEWER=true
 RUN_PEAK_ANNOTATION=false
@@ -75,7 +86,8 @@ Use a small paired-end ATAC-seq dataset with at least two biological samples and
 - all expected filtered BAMs pass `samtools quickcheck`;
 - filtering attrition tables reconcile with alignment and deduplication counts;
 - PE MACS3 logs show `BAMPE` and requested peak files are non-empty;
-- every expected `_CPM.bw` and `_DESeq2Consensus.bw` is non-empty;
+- every expected `_CPM.bw`, `_DESeq2Consensus.{bw,bedGraph}` and
+  `_DESeq2RobustCPM.{bw,bedGraph}` is non-empty, and no CPM bedGraph is produced;
 - `consensus_peaks.bed` applies the configured biological-sample support;
 - `consensus_sizeFactors.tsv` contains one positive finite factor per non-control sample;
 - each ATAC sample has a non-empty compressed `*.ataqv.json.gz` and TSS enrichment value;
@@ -85,11 +97,17 @@ Use a small paired-end ATAC-seq dataset with at least two biological samples and
 - `deseq2atac/broad/` and `deseq2atac/narrow/` contain independently supported
   consensuses, readable compressed count and result tables, explicit contrast
   direction, and non-empty PNG/PDF figures;
+- every complete DiffBind and DESeq2ATAC consensus has an annotation table, and
+  annotation columns propagate to complete and significant pair tables;
+- a multi-condition fixture exports all `k*(k-1)/2` pairs among eligible
+  conditions, while singleton-condition samples remain in consensus construction
+  but not in statistical models;
 - PE and SE fixtures confirm one fragment and one read per observation,
   respectively; do not combine both layouts in one run;
 - a no-hit DESeq2ATAC fixture completes successfully with a header-only
   significant table and an explicit zero-significant summary;
-- `ucsc_tracks.txt` contains the intended relative or public locations;
+- each populated bigWig directory has `ucsc_tracks.txt` with the intended
+  relative or public locations;
 - a deliberately failed child job causes a non-zero stage exit;
 - resume checkpoints skip completed work and rerun when their signature changes.
 

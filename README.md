@@ -1,6 +1,6 @@
 # ATACseq2tracks 3.2.0
 
-ATACseq2tracks is a samplesheet-driven Bash workflow for bulk ATAC-seq and related chromatin-profiling assays. This 3.2.0 repository snapshot is prepared as a reviewable update to [`MichalGd/ATACseq2tracks`](https://github.com/MichalGd/ATACseq2tracks). It retains the Bash architecture; it does not introduce Nextflow or Snakemake.
+ATACseq2tracks is a samplesheet-driven Bash workflow for bulk ATAC-seq and related chromatin-profiling assays. This directory is the cumulative 2026-08-18 prepared 3.2.0 snapshot. The public [`MichalGd/ATACseq2tracks`](https://github.com/MichalGd/ATACseq2tracks) `main` branch may describe an earlier 3.2.0 state until this snapshot is reviewed and applied. This update retains the Bash architecture; it does not introduce Nextflow or Snakemake.
 
 > Status: release candidate. Static checks pass, but representative paired-end and single-end ATAC-seq runs are still required before this update should be tagged as production-ready.
 
@@ -64,8 +64,8 @@ flowchart TD
     V --> R
     Q --> R
     R --> S{Automatic cleanup enabled?}
-    S -->|No, default| T[Retain intermediates]
-    S -->|Yes| U[Remove only selected intermediates]
+    S -->|Yes, default| U[Remove only selected intermediates]
+    S -->|No| T[Retain intermediates]
 ```
 
 Steps are checkpointed and resume independently. DiffBind and DESeq2ATAC are
@@ -302,7 +302,9 @@ type has `comparisons/<comparison_id>/`; for `k` conditions with at least two
 biological samples, all `k*(k-1)/2` pairs are exported. All samples, including
 singleton-condition samples, contribute to consensus construction. See
 the differential-accessibility documentation for the exact consensus algorithm
-and its distinction from DiffBind and for GTF/cCRE annotation provenance.
+and its distinction from DiffBind. The exact annotation columns, category rules,
+reference provenance and interpretation limits are documented in
+[Peak annotation](docs/16_peak_annotation.md).
 
 cCRE classification is required by default. Preflight verifies the reference
 for the selected genome. On a server without that reference, set
@@ -364,6 +366,7 @@ Then execute small PE-only and SE-only datasets with at least two biological sam
 | Find and interpret generated files | [Outputs](docs/07_outputs.md) |
 | Review QC metrics | [Post-alignment QC](docs/12_post_alignment_qc.md) |
 | Design or interpret differential analysis | [Differential accessibility](docs/13_differential_accessibility.md) and [Replicates and design](docs/14_replicates_and_experimental_design.md) |
+| Interpret gene-context and cCRE annotations | [Peak annotation](docs/16_peak_annotation.md) |
 | Diagnose a failure | [Troubleshooting](docs/09_troubleshooting.md) |
 | Review the v3.2.0 update | [Scope](docs/update_3.2.0/MINIMAL_CRITICAL_IMPROVEMENTS.md), [application checks](docs/update_3.2.0/APPLY_UPDATE.md) and [manifest](docs/update_3.2.0/UPDATE_MANIFEST.md) |
 

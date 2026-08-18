@@ -1,6 +1,14 @@
-# ATACseq2tracks 3.2.0 update manifest
+# Original ATACseq2tracks 3.2.0 baseline manifest
 
-This folder is a complete repository snapshot prepared from GitHub `main` as inspected on 2026-08-02, plus the proposed 3.2.0 changes. It is not a Git clone and intentionally contains no `.git` directory.
+> **Historical scope:** This records the initial snapshot prepared from GitHub
+> `main` on 2026-08-02. It is not a complete file manifest for the cumulative
+> 2026-08-18 prepared repository. Use a full tree comparison when applying the
+> current snapshot and see
+> [`v3.2.0_UNIVERSAL_DIFFERENTIAL_ANNOTATION_UPDATE_2026-08-18.md`](../v3.2.0_UNIVERSAL_DIFFERENTIAL_ANNOTATION_UPDATE_2026-08-18.md)
+> plus [`update.md`](../../update.md) for later behavior.
+
+The original folder was a complete repository snapshot at that date. It was not
+a Git clone and intentionally contained no `.git` directory.
 
 ## Source baseline
 

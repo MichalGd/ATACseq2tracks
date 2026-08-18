@@ -137,6 +137,11 @@ Copy the template and edit for your server.
 | `TSS_BED_MM39` | Optional strand-aware mm39 BED6 TSS file |
 | `CCRE_BED_HG38` | Native hg38 ENCODE4 cCRE BED/bed.gz; required for an hg38 run when cCRE annotation is enabled |
 | `CCRE_BED_MM39` | mm39 cCRE BED; required for an mm39 run when cCRE annotation is enabled |
+| `CCRE_SOURCE_HG38` | Provenance label copied into hg38 annotation tables |
+| `CCRE_SOURCE_MM39` | Provenance label copied into mm39 annotation tables |
+
+See [Peak annotation](16_peak_annotation.md) for the exact GTF category rules,
+cCRE class meanings, expected reference construction and output columns.
 
 #### Blacklist regions
 
@@ -180,6 +185,7 @@ Peak concurrent CPU usage: `THREADS_PARALLEL_JOBS × THREADS_ALIGN`
 | `KEEP_TRIMMED_FASTQ` | Keep trimmed FASTQs in `trimmedFastq/` | `false` |
 | `KEEP_DEDUP_BAMS` | Keep pre-blacklist deduplicated BAMs | `false` |
 | `KEEP_FILTERED_BAMS` | Keep quantitative analysis BAMs | `true` |
+| `KEEP_RAW_BEDGRAPH` | Keep raw coverage bedGraphs in `bedGraph/` | `false` |
 
 #### Consensus, tracks and ATAC QC
 

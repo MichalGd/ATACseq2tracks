@@ -65,8 +65,8 @@ flowchart TD
     V --> R
     Q --> R
     R --> S{Automatic cleanup enabled?}
-    S -->|No, default| T[Retain intermediates]
-    S -->|Yes| U[Remove only selected intermediates]
+    S -->|Yes, default| U[Remove only selected intermediates]
+    S -->|No| T[Retain intermediates]
 ```
 
 DiffBind and DESeq2ATAC are separate differential-accessibility analyses.

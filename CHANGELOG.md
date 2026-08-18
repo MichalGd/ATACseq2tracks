@@ -81,8 +81,9 @@ v3.2.1 yet.
   a supported DiffBind peak-caller identifier.
 - Skip a header-only narrow or broad DiffBind companion sheet, while still
   failing if no runnable differential analysis exists.
-- Require exactly two conditions with at least two biological replicates per
-  condition for this v3.2.0 differential-analysis path.
+- At the 2026-08-04 hotfix stage, require exactly two conditions with at least
+  two biological replicates per condition. This restriction was superseded by
+  the universal multi-condition update of 2026-08-18 above.
 - Use all normalized sites for DiffBind PCA and heatmap QC so those plots are
   not contingent on finding an FDR-significant site.
 - Export both all tested DiffBind sites and the FDR 0.05 subset, and explicitly

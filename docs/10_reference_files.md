@@ -65,6 +65,10 @@ the selected genome's cCRE BED must exist and pass preflight. A server without
 this reference can explicitly set `RUN_CCRE_ANNOTATION=false` for GTF-only
 annotation.
 
+For the exact annotation categories, precedence, table columns and biological
+limitations, see [Peak annotation](16_peak_annotation.md). This page focuses on
+preparing the reference files.
+
 For human hg38, use the native GRCh38 ENCODE4 expanded Registry of cCREs. The
 stable comprehensive BED is available from the
 [ENCODE cCRE supplementary-data directory](https://users.moore-lab.org/ENCODE-cCREs/Supplementary-Data/)
@@ -103,9 +107,10 @@ bash utilities/prepare_encode4_hg38_ccre.sh \
 Then set `CCRE_BED_HG38` to the reported BED path. Existing files are validated
 and retained; use `--force` only to deliberately redownload and replace one.
 The installed columns are `chrom`, `chromStart`, `chromEnd`, two ENCODE
-accessions, and cCRE class. This is directly compatible with
-`peak_annotation_helpers.R`, which uses the first accession as the element ID
-and the sixth column for classes such as PLS, pELS and dELS.
+accessions, and cCRE class. This is directly compatible with the workflow
+parser, which uses BED column 4 as the element ID and detects the recognized
+class vocabulary in the remaining columns; for this human file the class is in
+column 6.
 
 For mouse mm39, reproduce the existing
 [ATAC-seq utility](https://github.com/MichalGd/ATAC-seq/blob/main/utilitiies/creating_ENCODE_cCRES_mm39_bigBed_track.sh):

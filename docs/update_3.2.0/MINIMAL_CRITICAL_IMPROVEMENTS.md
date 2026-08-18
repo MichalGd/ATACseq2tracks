@@ -1,5 +1,12 @@
 # Minimal critical improvements for ATACseq2tracks 3.2.0
 
+> **Historical initial scope (2026-08-02):** Track names, cleanup defaults and
+> differential behavior on this page describe the first 3.2.0 proposal and are
+> superseded by the current [main README](../../README.md),
+> [outputs](../07_outputs.md), and
+> [differential-accessibility](../13_differential_accessibility.md) pages. It is
+> retained to document why the update began, not as a current run guide.
+
 This update intentionally retains the Bash architecture. It is a focused safety and scientific-correctness update, not a Nextflow or Snakemake migration.
 
 ## Immediate priorities implemented in this overlay

@@ -81,7 +81,7 @@ recentered to a fixed summit window.
 ## Comparison with DiffBind
 
 The workflow runs DiffBind separately on broad and narrow inputs. DiffBind uses
-its default `minOverlap=2` consensus support and the configured
+an explicit `minOverlap=2` all-sample consensus support rule and the configured
 `DIFFBIND_SUMMITS=100`, which recenters retained sites around consensus summits
 to approximately 201-bp windows.
 
@@ -120,24 +120,29 @@ deseq2atac/
 |   |-- deseq2atac_consensus_peaks_with_support.tsv.gz
 |   |-- deseq2atac_raw_counts.tsv.gz
 |   |-- deseq2atac_normalized_counts.tsv.gz
-|   |-- deseq2atac_results_all.tsv.gz
-|   |-- deseq2atac_results_significant.tsv.gz
+|   |-- deseq2atac_consensus_peak_annotations.tsv.gz
+|   |-- differential_accessibility_condition_eligibility.tsv
+|   |-- differential_accessibility_comparisons.tsv
 |   |-- deseq2atac_summary.txt
-|   `-- plots/
+|   |-- plots/
+|   `-- comparisons/<comparison_id>/
+|       |-- deseq2atac_results_all.tsv.gz
+|       |-- deseq2atac_results_significant.tsv.gz
+|       |-- annotation_summary.tsv
+|       |-- deseq2atac_summary.txt
+|       `-- plots/
 `-- narrow/
-    |-- deseq2atac_consensus_peaks.bed
-    |-- deseq2atac_consensus_peaks_with_support.tsv.gz
-    |-- deseq2atac_raw_counts.tsv.gz
-    |-- deseq2atac_normalized_counts.tsv.gz
-    |-- deseq2atac_results_all.tsv.gz
-    |-- deseq2atac_results_significant.tsv.gz
-    |-- deseq2atac_summary.txt
-    `-- plots/
+    `-- (same shared-universe and per-comparison layout)
 ```
 
 Both peak-type directories also contain sample and library metadata, DESeq2 size
 factors, the serialized analysis object, session information and PNG/PDF
-diagnostics.
+diagnostics. In a two-condition analysis, selected root-level result copies are
+also retained for backward compatibility; canonical results remain under
+`comparisons/<comparison_id>/`.
+
+See [`docs/16_peak_annotation.md`](docs/16_peak_annotation.md) for the exact GTF
+and cCRE category definitions, columns, reference construction and limitations.
 
 ## Validation completed
 

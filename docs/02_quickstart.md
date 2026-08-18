@@ -12,7 +12,7 @@ For full details see [Installation](03_installation.md) and [Input files](04_inp
 ## Step 1 — Install
 
 ```bash
-git clone https://github.com/<username>/ATACseq2tracks.git ATACseq2tracks
+git clone https://github.com/MichalGd/ATACseq2tracks.git ATACseq2tracks
 cd ATACseq2tracks
 conda env create -f environment.yml
 conda activate ATACseq2tracks
@@ -45,7 +45,10 @@ OUTPUT_DIR="/path/to/my_project/analysis/"
 INDEX_HG38="/path/to/bowtie2_index/hg38"
 CHROM_SIZES_HUMAN="/path/to/hs38n.chrom.sizes"
 BLACKLIST_HG38="/path/to/blacklist_hg38_ENCFF356LFX.bed"
+GTF_HUMAN="/path/to/gencode.hg38.annotation.gtf"
+CCRE_BED_HG38="/path/to/Supplementary-Data-1.GRCh38-cCREs-V4.bed.gz"
 PICARD_JAR="/path/to/picard.jar"
+BEDGRAPH_TO_BIGWIG="/path/to/bedGraphToBigWig"
 
 # deepTools QC threads (Step 10)
 THREADS_DEEPTOOLS=8
@@ -70,7 +73,8 @@ See [Input files](04_inputs.md) for the full column reference and example rows.
 Validate before running:
 
 ```bash
-python3 ATACseq2tracks/scripts/validate_samplesheet.py /path/to/my_project/config/samplesheet.csv
+python3 /path/to/ATACseq2tracks/scripts/validate_samplesheet.py \
+    /path/to/my_project/config/samplesheet.csv
 ```
 
 ---
@@ -97,13 +101,16 @@ tail -f /path/to/my_project/run.log
 
 | Result | Path |
 |---|---|
-| bigwig tracks | `analysis/bigwig/` |
+| CPM bigWigs | `analysis/bigwig/` |
+| DESeq2 consensus bigWig/bedGraph tracks | `analysis/bigwig_deseq2_consensus/` |
+| DESeq2 robust-CPM bigWig/bedGraph tracks | `analysis/bigwig_deseq2_robust_cpm/` |
 | Merged tracks | `analysis/bigwig_merged/` |
 | Peaks (narrow + broad) | `analysis/peaks/per_replicate/` |
 | Post-alignment QC | `analysis/qc_post_alignment/` |
 | DiffBind samplesheets | `analysis/diffbind/` |
 | DiffBind results | `analysis/diffbind_results/` |
 | DESeq2ATAC broad/narrow analyses | `analysis/deseq2atac/{broad,narrow}/` |
+| Consensus peak annotations | DiffBind analysis roots and `analysis/deseq2atac/{broad,narrow}/` |
 | Pair-level differential summary | `analysis/reports/differential_accessibility_summary.{tsv,html}` |
 | HTML pipeline report | `analysis/reports/pipeline_report_<date>.html` |
 

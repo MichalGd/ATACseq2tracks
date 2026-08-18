@@ -1,5 +1,7 @@
 # DESeq2ATAC legacy-method review
 
+[Previous: Replicates and design](14_replicates_and_experimental_design.md) | [Next: Peak annotation](16_peak_annotation.md)
+
 ## Source reviewed
 
 The DESeq2ATAC module was informed by the scripts in
@@ -68,9 +70,12 @@ PE-only or SE-only signal definition per run.
 
 Hard-coded column indices and condition vectors were replaced with validated
 samplesheet metadata. Technical rows are collapsed by `sample_id + replicate`;
-biological replicates remain separate. Exactly two conditions and at least two
-biological replicates per condition are required in this release. The reference,
-contrast direction and design formula are written to the summary.
+biological replicates remain separate. Any number and names of conditions are
+accepted. All non-control samples contribute to consensus construction and the
+descriptive raw matrix; conditions with fewer than two biological samples are
+excluded only from the statistical model. One model is fitted per peak type and
+all unordered pairs among eligible conditions are exported. The reference,
+contrast direction and design formula are written to each comparison summary.
 
 An optional block column is supported only when explicitly configured and when
 the resulting design matrix is full rank. Replicate numbers are not assumed to
@@ -128,3 +133,5 @@ made safe by concatenating count matrices alone.
   reference are needed for absolute global shifts.
 - Real PE and SE server fixtures are still required to validate runtime,
   performance and output appearance in the production environment.
+
+[Previous: Replicates and design](14_replicates_and_experimental_design.md) | [Next: Peak annotation](16_peak_annotation.md)
