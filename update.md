@@ -1,14 +1,19 @@
 # ATACseq2tracks snapshot 3.2.0 update
 
-**Snapshot:** ATACseq2tracks 3.2.0 release candidate  
-**Update date:** 2026-08-18  
+**Snapshot:** ATACseq2tracks 3.2.0 release candidate
+
+**Update date:** 2026-08-19
+
 **Scope:** Universal multi-condition differential accessibility, pair summaries,
 and GTF/cCRE annotation, retaining dual broad/narrow analysis
 
 The public workflow version remains **3.2.0**. This update extends the prepared
 3.2.0 snapshot and does not create version 3.2.1.
 
-The latest implementation details and validation handoff are in
+The 2026-08-19 IRanges namespace correction and server-resume instructions are
+documented in
+[`docs/v3.2.0_IRANGES_NAMESPACE_HOTFIX_2026-08-19.md`](docs/v3.2.0_IRANGES_NAMESPACE_HOTFIX_2026-08-19.md).
+The universal implementation details and validation handoff remain in
 [`docs/v3.2.0_UNIVERSAL_DIFFERENTIAL_ANNOTATION_UPDATE_2026-08-18.md`](docs/v3.2.0_UNIVERSAL_DIFFERENTIAL_ANNOTATION_UPDATE_2026-08-18.md).
 
 ## Universal comparison extension (2026-08-18)

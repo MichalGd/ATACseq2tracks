@@ -391,7 +391,7 @@ for (index in seq_len(nrow(metadata))) {
     peaks <- canonicalize_ranges(import(metadata$peak_file[[index]]), genome)
     peaks <- harmonize_seqname_style(peaks, as.character(seqnames(first_peak)))
     if (length(blacklist)) {
-        peaks <- peaks[!overlapsAny(peaks, blacklist, ignore.strand = TRUE)]
+        peaks <- peaks[!IRanges::overlapsAny(peaks, blacklist, ignore.strand = TRUE)]
     }
     strand(peaks) <- "*"
     peaks <- reduce(peaks, ignore.strand = TRUE)

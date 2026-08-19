@@ -350,13 +350,22 @@ for genome in "${USED_GENOMES[@]:-}"; do
     fi
 done
 
-for package in DESeq2 DiffBind ggplot2 dplyr rtracklayer GenomicAlignments GenomicRanges Rsamtools BiocParallel; do
+for package in DESeq2 DiffBind ggplot2 dplyr rtracklayer GenomicAlignments GenomicRanges IRanges Rsamtools BiocParallel; do
     if "${R_BIN:-Rscript}" -e "quit(status=ifelse(requireNamespace('${package}', quietly=TRUE), 0, 1))" >/dev/null 2>&1; then
         ok "R package: $package"
     else
         fail "R package not installed: $package"
     fi
 done
+
+if "${R_BIN:-Rscript}" -e '
+exports <- getNamespaceExports("IRanges")
+quit(status=ifelse(all(c("overlapsAny", "findOverlaps") %in% exports), 0, 1))
+' >/dev/null 2>&1; then
+    ok "IRanges overlap generics exported"
+else
+    fail "IRanges must export overlapsAny and findOverlaps"
+fi
 
 echo "RESULT: ${PASS} OK | ${WARN} warnings | ${FAIL} failures"
 (( FAIL == 0 )) || exit 1

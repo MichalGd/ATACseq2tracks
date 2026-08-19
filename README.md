@@ -1,8 +1,8 @@
 # ATACseq2tracks 3.2.0
 
-ATACseq2tracks is a samplesheet-driven Bash workflow for bulk ATAC-seq and related chromatin-profiling assays. This directory is the cumulative 2026-08-18 prepared 3.2.0 snapshot. The public [`MichalGd/ATACseq2tracks`](https://github.com/MichalGd/ATACseq2tracks) `main` branch may describe an earlier 3.2.0 state until this snapshot is reviewed and applied. This update retains the Bash architecture; it does not introduce Nextflow or Snakemake.
+ATACseq2tracks is a samplesheet-driven Bash workflow for bulk ATAC-seq and related chromatin-profiling assays. This directory is the cumulative 2026-08-19 prepared 3.2.0 snapshot, including the IRanges namespace hotfix identified by the first universal multi-condition production run. This update retains the Bash architecture; it does not introduce Nextflow or Snakemake.
 
-> Status: release candidate. Static checks pass, but representative paired-end and single-end ATAC-seq runs are still required before this update should be tagged as production-ready.
+> Status: release candidate. The paired-end production run validated upstream processing, tracks and QC and exposed the corrected differential-analysis namespace defect. A successful resumed differential run and a representative single-end run are still required before this update should be tagged as production-ready. See [the namespace hotfix note](docs/v3.2.0_IRANGES_NAMESPACE_HOTFIX_2026-08-19.md).
 
 ## Principal capabilities
 

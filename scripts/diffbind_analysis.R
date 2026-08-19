@@ -184,7 +184,7 @@ if (blacklist_file != "") {
         blacklist, unique(as.character(GenomicRanges::seqnames(all_consensus)))
     )
     all_consensus <- all_consensus[
-        !GenomicRanges::overlapsAny(all_consensus, blacklist, ignore.strand = TRUE)
+        !IRanges::overlapsAny(all_consensus, blacklist, ignore.strand = TRUE)
     ]
 }
 if (!length(all_consensus)) {

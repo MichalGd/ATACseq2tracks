@@ -28,6 +28,8 @@ grep -q 'annotation_canonicalize(all_consensus, genome)' "$DIFFBIND_R" \
     || { echo 'FAIL DiffBind consensus is not restricted to canonical chromosomes' >&2; exit 1; }
 grep -q 'overlapsAny(all_consensus, blacklist' "$DIFFBIND_R" \
     || { echo 'FAIL DiffBind consensus is not explicitly blacklist-filtered' >&2; exit 1; }
+grep -q 'IRanges::overlapsAny(all_consensus, blacklist' "$DIFFBIND_R" \
+    || { echo 'FAIL DiffBind does not use the exported IRanges overlap generic' >&2; exit 1; }
 grep -q 'comparison_plan(eligible_order)' "$DIFFBIND_R" \
     || { echo 'FAIL DiffBind universal pair planning is missing' >&2; exit 1; }
 grep -q 'other peak types remain eligible to run' "$DIFFBIND_SH" \
@@ -58,6 +60,16 @@ grep -q 'ccre_primary_class' "$ANNOTATION_R" \
     || { echo 'FAIL cCRE classification is missing' >&2; exit 1; }
 grep -q 'pELS|dELS' "$ANNOTATION_R" \
     || { echo 'FAIL enhancer-like cCRE classification is missing' >&2; exit 1; }
+if grep -Eq 'GenomicRanges::(overlapsAny|findOverlaps)' "$DIFFBIND_R" "$DESEQ_R" "$ANNOTATION_R"; then
+    echo 'FAIL non-exported overlap generic requested from GenomicRanges' >&2
+    exit 1
+fi
+grep -q 'IRanges::overlapsAny' "$DESEQ_R" \
+    || { echo 'FAIL DESeq2ATAC does not use IRanges::overlapsAny' >&2; exit 1; }
+grep -q 'IRanges::overlapsAny' "$ANNOTATION_R" \
+    || { echo 'FAIL annotation helper does not use IRanges::overlapsAny' >&2; exit 1; }
+grep -q 'IRanges::findOverlaps' "$ANNOTATION_R" \
+    || { echo 'FAIL annotation helper does not use IRanges::findOverlaps' >&2; exit 1; }
 echo 'OK   built-in GTF and cCRE annotation fields are implemented'
 
 grep -q 'differential_accessibility_comparisons.tsv' "$DESEQ_R" \
@@ -154,7 +166,8 @@ grep -q '001_B_vs_A' "$TMP_DIR/reports/differential_accessibility_summary.html" 
 echo 'OK   combined pair-level TSV and HTML report generation'
 
 if command -v Rscript >/dev/null 2>&1 && \
-   Rscript -e 'p <- c("DESeq2","GenomicAlignments","GenomicRanges","Rsamtools","rtracklayer","ggplot2","BiocParallel"); quit(status=ifelse(all(vapply(p, requireNamespace, logical(1), quietly=TRUE)),0,1))' >/dev/null 2>&1; then
+   Rscript -e 'p <- c("DESeq2","GenomicAlignments","GenomicRanges","IRanges","Rsamtools","rtracklayer","ggplot2","BiocParallel"); quit(status=ifelse(all(vapply(p, requireNamespace, logical(1), quietly=TRUE)),0,1))' >/dev/null 2>&1; then
+    Rscript "${REPO_DIR}/tests/test_iranges_namespace.R"
     Rscript "$DESEQ_R" --self-test
 else
     echo 'WARN R/Bioconductor packages unavailable; DESeq2ATAC execution self-test skipped'

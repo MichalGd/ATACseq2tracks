@@ -166,11 +166,11 @@ annotate_peak_ranges <- function(peaks, region_ids, genome, gtf_file,
         strand = GenomicRanges::strand(tss)
     )
 
-    promoter_hit <- GenomicRanges::overlapsAny(peaks, promoters, ignore.strand = TRUE)
+    promoter_hit <- IRanges::overlapsAny(peaks, promoters, ignore.strand = TRUE)
     exon_hit <- if (length(exons)) {
-        GenomicRanges::overlapsAny(peaks, exons, ignore.strand = TRUE)
+        IRanges::overlapsAny(peaks, exons, ignore.strand = TRUE)
     } else rep(FALSE, length(peaks))
-    gene_hit <- GenomicRanges::overlapsAny(peaks, genes, ignore.strand = TRUE)
+    gene_hit <- IRanges::overlapsAny(peaks, genes, ignore.strand = TRUE)
 
     # In this simple GTF classifier, intron means gene-body sequence not covered
     # by any annotated exon. The separate gene_body_overlap column remains
@@ -225,7 +225,7 @@ annotate_peak_ranges <- function(peaks, region_ids, genome, gtf_file,
     if (ccre_file != "") {
         if (!file.exists(ccre_file)) stop("Configured cCRE annotation not found: ", ccre_file)
         ccre <- annotation_read_ccre(ccre_file, genome, reference_names)
-        hits <- GenomicRanges::findOverlaps(peaks, ccre, ignore.strand = TRUE)
+        hits <- IRanges::findOverlaps(peaks, ccre, ignore.strand = TRUE)
         if (length(hits)) {
             query <- S4Vectors::queryHits(hits)
             subject <- S4Vectors::subjectHits(hits)

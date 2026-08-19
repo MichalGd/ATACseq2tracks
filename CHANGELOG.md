@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.2.0 IRanges namespace hotfix - 2026-08-19
+
+- Fix fatal broad/narrow DiffBind and DESeq2ATAC annotation failures by calling
+  the `overlapsAny()` and `findOverlaps()` generics from their exporting
+  `IRanges` namespace.
+- Add explicit IRanges dependency/export checks to preflight validation.
+- Add static and functional regression coverage for overlap dispatch on
+  `GRanges` objects.
+- Preserve the version string and all upstream processing, normalization,
+  checkpoint and output behavior so failed runs can resume at Steps 12/12a.
+
 ## v3.2.0 universal differential/annotation update - 2026-08-18
 
 - Support any number and names of conditions and export all pairwise contrasts

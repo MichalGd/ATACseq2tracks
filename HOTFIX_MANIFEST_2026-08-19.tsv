@@ -1,0 +1,12 @@
+path	change
+scripts/diffbind_analysis.R	Use IRanges::overlapsAny for consensus blacklist filtering
+scripts/deseq2atac_analysis.R	Use IRanges::overlapsAny for per-sample peak blacklist filtering
+scripts/peak_annotation_helpers.R	Use exported IRanges overlap generics for gene and cCRE annotation
+scripts/smoke_test.sh	Require IRanges and validate overlapsAny/findOverlaps exports
+tests/test_differential_accessibility.sh	Reject invalid GenomicRanges namespace calls and run functional overlap test when dependencies exist
+tests/test_iranges_namespace.R	Functional overlap-dispatch regression test on GRanges
+CHANGELOG.md	Record the 2026-08-19 namespace hotfix
+README.md	Identify the cumulative hotfix snapshot and validation state
+update.md	Link the namespace hotfix handoff
+docs/v3.2.0_IRANGES_NAMESPACE_HOTFIX_2026-08-19.md	Scope, diagnosis, validation and resume documentation
+APPLY_NAMESPACE_HOTFIX_2026-08-19.md	Server backup, overlay, validation and resume instructions
