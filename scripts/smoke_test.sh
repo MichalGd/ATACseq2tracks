@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ATACseq2tracks v3.2.0 - pre-flight validation
+# ATACseq2tracks v4.0.0 - pre-flight validation
 set -euo pipefail
 
 SAMPLESHEET_ARG="${1:?ERROR: pass samplesheet.csv as argument 1}"
@@ -23,6 +23,20 @@ command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 is required to vali
 python3 "$INPUT_SANITIZER" "$CONFIG"
 # shellcheck disable=SC1090
 source "$CONFIG"
+for setting_value in \
+    "QC_SAMPLE_PARALLEL_JOBS=${QC_SAMPLE_PARALLEL_JOBS:-4}" \
+    "ATAQV_PARALLEL_JOBS=${ATAQV_PARALLEL_JOBS:-4}" \
+    "TRACK_PARALLEL_JOBS=${TRACK_PARALLEL_JOBS:-2}" \
+    "POOLED_MACS_PARALLEL_JOBS=${POOLED_MACS_PARALLEL_JOBS:-2}" \
+    "MERGE_PARALLEL_JOBS=${MERGE_PARALLEL_JOBS:-2}"; do
+    setting_name="${setting_value%%=*}"
+    value="${setting_value#*=}"
+    if [[ "$value" =~ ^[1-9][0-9]*$ ]]; then
+        ok "$setting_name: $value"
+    else
+        fail "$setting_name must be a positive integer"
+    fi
+done
 case "${RUN_CCRE_ANNOTATION:-true}" in
     true|false) ;;
     *) fail "RUN_CCRE_ANNOTATION must be true or false" ;;
@@ -44,7 +58,7 @@ for script in validate_samplesheet.py sanitize_text_inputs.py fastqc_batch.sh tr
     bowtie2_batch.sh picard_dedup_batch.sh blacklist_filter.sh \
     blacklist_filter_batch.sh genomecoverage_single.sh genomecoverage_batch.sh merge_replicates.sh \
     macs2_peaks.sh macs2_batch.sh post_alignment_qc_batch.sh \
-    consensus_peak_size_factors.R qc_table_helpers.sh track_normalization_helpers.sh \
+    consensus_peak_size_factors.R qc_table_helpers.sh track_normalization_helpers.sh parallel_job_helpers.sh \
     create_ucsc_tracks.sh ataqv_qc_batch.sh \
     prepare_tss_bed.py extract_ataqv_metrics.py plot_fragment_periodicity.py \
     plot_chrom_coverage.py peak_interpretation.sh prepare_diffbind.R \
@@ -87,7 +101,7 @@ with open(sys.argv[1], newline="") as handle:
 PY
     )
     if (( ${#USED_GENOMES[@]} > 1 )); then
-        fail "multiple genome builds in one run (${USED_GENOMES[*]}); v3.2.0 requires one build per run"
+        fail "multiple genome builds in one run (${USED_GENOMES[*]}); v4.0.0 requires one build per run"
     elif (( ${#USED_GENOMES[@]} == 1 )); then
         ok "single genome build: ${USED_GENOMES[0]}"
     fi
@@ -226,7 +240,7 @@ SE_MODE="${SE_SIGNAL_MODE:-read}"
 if [[ "${SE_MODE,,}" == "read" ]]; then
     ok "single-end signal mode: read"
 else
-    fail "unsupported SE_SIGNAL_MODE=${SE_MODE}; v3.2.0 supports read only"
+    fail "unsupported SE_SIGNAL_MODE=${SE_MODE}; v4.0.0 supports read only"
 fi
 
 if [[ "${TRACK_STANDARD_CHROMS_ONLY:-true}" == "true" ]]; then

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Strict table parsers used by the v3.2.0 test-run hotfix.
+# Strict table parsers used by the v4.0.0 test-run hotfix.
 
 picard_duplication_pct() {
     local metrics_file="$1"

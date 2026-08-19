@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ATACseq2tracks v3.2.0 - sample sheet validator
+ATACseq2tracks v4.0.0 - sample sheet validator
 Usage: python3 scripts/validate_samplesheet.py [--check-files] samplesheet.csv
 
 Schema changes:
@@ -17,7 +17,7 @@ Schema changes:
 """
 import csv, sys, os, argparse
 
-# Current 17-column schema (v3.1.0+, unchanged in v3.2.0)
+# Current 17-column schema (v3.1.0+, unchanged in v4.0.0)
 REQUIRED_COLS_V31 = [
     "sample_id","fastq_1","fastq_2","layout","genome",
     "assay","factor","condition","treatment","cell_type",
@@ -54,7 +54,7 @@ def detect_schema(fieldnames):
     """Return (REQUIRED_COLS, CONSISTENT_COLS, schema_version_str)."""
     if "chipqc_annotation" in fieldnames:
         return REQUIRED_COLS_V30, CONSISTENT_COLS_V30, "v3.0.x (18-column, chipqc_annotation present — accepted, ignored by pipeline)"
-    return REQUIRED_COLS_V31, CONSISTENT_COLS_V31, "v3.2.0 (17-column; compatible with v3.1.0)"
+    return REQUIRED_COLS_V31, CONSISTENT_COLS_V31, "v4.0.0 (17-column; compatible with v3.1.0)"
 
 
 def main():

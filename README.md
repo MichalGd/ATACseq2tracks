@@ -1,6 +1,6 @@
-# ATACseq2tracks 3.2.0
+# ATACseq2tracks 4.0.0
 
-ATACseq2tracks is a samplesheet-driven Bash workflow for bulk ATAC-seq and related chromatin-profiling assays. This directory is the cumulative 2026-08-19 prepared 3.2.0 snapshot, including the IRanges namespace hotfix identified by the first universal multi-condition production run. This update retains the Bash architecture; it does not introduce Nextflow or Snakemake.
+ATACseq2tracks is a samplesheet-driven Bash workflow for bulk ATAC-seq and related chromatin-profiling assays. Version 4.0.0 is the cumulative 2026-08-19 release, including universal multi-condition analysis, default peak annotation, the IRanges namespace correction and bounded later-stage parallelism. This release retains the Bash architecture; it does not introduce Nextflow or Snakemake.
 
 > Status: release candidate. The paired-end production run validated upstream processing, tracks and QC and exposed the corrected differential-analysis namespace defect. A successful resumed differential run and a representative single-end run are still required before this update should be tagged as production-ready. See [the namespace hotfix note](docs/v3.2.0_IRANGES_NAMESPACE_HOTFIX_2026-08-19.md).
 
@@ -219,10 +219,23 @@ CCRE_BED_MM39="/path/to/encodeCcreCombined_mm39_sorted.bed"
 SE_SIGNAL_MODE="read"
 RUN_ATAQV_QC=true
 GENERATE_ATAQV_VIEWER=true
+QC_SAMPLE_PARALLEL_JOBS=4
+ATAQV_PARALLEL_JOBS=4
+TRACK_PARALLEL_JOBS=2
+POOLED_MACS_PARALLEL_JOBS=2
+MERGE_PARALLEL_JOBS=2
 RUN_PEAK_ANNOTATION=false
 RUN_MOTIF_ENRICHMENT=false
 ENABLE_AUTOMATIC_CLEANUP=true
 ```
+
+The five later-stage job limits are defaults and may be changed in any run
+configuration. They control concurrent samples or groups; `THREADS_ATAQV`,
+`THREADS_DEEPTOOLS`, `THREADS_BIGWIG`, and `THREADS_SAMTOOLS` remain the
+per-process thread limits. Because BAM scans are often storage-bound, increase
+job counts gradually rather than using every available CPU immediately. Older
+run configurations that omit these variables automatically use the defaults
+shown above.
 
 Only one genome build and one sequencing layout may be processed in a run. Separate hg38/mm39 and PE/SE libraries into different runs.
 
@@ -277,9 +290,11 @@ bash atacseq2tracks.sh --config /absolute/path/to/project/config/config.conf
 │   ├── tables/consensus_sizeFactors.tsv
 │   ├── tables/track_normalization_metadata.tsv
 │   ├── peak_sets/consensus_peaks.bed
+│   ├── tables/parallel_job_timing.tsv
 │   └── atac_qc/
 │       ├── tables/ataqv_selected_metrics.tsv
 │       ├── tables/nucleosome_periodicity_metrics.tsv
+│       ├── tables/ataqv_job_timing.tsv
 │       ├── plots/*.fragment_length_periodicity.{png,pdf}
 │       ├── ataqv_metrics/*.ataqv.json.gz
 │       └── ataqv_viewer/
@@ -368,7 +383,8 @@ Then execute small PE-only and SE-only datasets with at least two biological sam
 | Design or interpret differential analysis | [Differential accessibility](docs/13_differential_accessibility.md) and [Replicates and design](docs/14_replicates_and_experimental_design.md) |
 | Interpret gene-context and cCRE annotations | [Peak annotation](docs/16_peak_annotation.md) |
 | Diagnose a failure | [Troubleshooting](docs/09_troubleshooting.md) |
-| Review the v3.2.0 update | [Scope](docs/update_3.2.0/MINIMAL_CRITICAL_IMPROVEMENTS.md), [application checks](docs/update_3.2.0/APPLY_UPDATE.md) and [manifest](docs/update_3.2.0/UPDATE_MANIFEST.md) |
+| Review the v4.0.0 release | [Release scope and validation](docs/v4.0.0_RELEASE_2026-08-19.md), [application guide](APPLY_V4.0.0_2026-08-19.md) and [manifest](V4.0.0_MANIFEST_2026-08-19.tsv) |
+| Review historical v3.2.0 updates | [Scope](docs/update_3.2.0/MINIMAL_CRITICAL_IMPROVEMENTS.md), [application checks](docs/update_3.2.0/APPLY_UPDATE.md) and [manifest](docs/update_3.2.0/UPDATE_MANIFEST.md) |
 
 The complete page list is in the [documentation index](docs/README.md).
 
@@ -385,6 +401,6 @@ The complete page list is in the [documentation index](docs/README.md).
 - DESeq2ATAC requires non-empty broad and narrow peak files for every biological
   sample; set samplesheet `macs2_mode=both`.
 - DESeq2 consensus scaling assumes most counted accessible regions do not undergo a coordinated global shift. Use spike-in or another explicit calibration strategy when global accessibility changes are expected.
-- The full 3.2.0 release candidate has not yet been executed end-to-end on a representative production dataset.
+- The full 4.0.0 release candidate has not yet been executed end-to-end on a representative production dataset.
 
 See [CHANGELOG.md](CHANGELOG.md) for release history.

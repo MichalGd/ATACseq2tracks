@@ -1,5 +1,5 @@
 #!/bin/bash
-# ATACseq2tracks v3.2.0 — Unified MultiQC pipeline report wrapper
+# ATACseq2tracks v4.0.0 — Unified MultiQC pipeline report wrapper
 # Usage: bash scripts/generate_pipeline_report.sh <outDir> [reportDir] [format]
 set -euo pipefail
 _load_config() {

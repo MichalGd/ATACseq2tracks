@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# ATACseq2tracks v3.2.0
+# ATACseq2tracks v4.0.0
 # ATAC-seq / chromatin profiling track-generation and QC workflow
 #
 # Usage:
@@ -18,7 +18,7 @@ INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_DIR="${INSTALL_DIR}/scripts"
 INPUT_SANITIZER="${SCRIPT_DIR}/sanitize_text_inputs.py"
 F2T_CONFIG=""
-PIPELINE_VERSION="$(tr -d '[:space:]' < "${INSTALL_DIR}/VERSION" 2>/dev/null || echo 3.2.0)"
+PIPELINE_VERSION="$(tr -d '[:space:]' < "${INSTALL_DIR}/VERSION" 2>/dev/null || echo 4.0.0)"
 
 usage() {
     echo "Usage: bash atacseq2tracks.sh --config /absolute/path/to/config.conf"
@@ -57,6 +57,11 @@ echo " Config      : $F2T_CONFIG"
 echo " Samplesheet : $SAMPLESHEET"
 echo " Output      : $OUTPUT_DIR"
 echo " Max jobs    : ${THREADS_PARALLEL_JOBS}"
+echo " QC jobs     : ${QC_SAMPLE_PARALLEL_JOBS:-4}"
+echo " ataqv jobs  : ${ATAQV_PARALLEL_JOBS:-4}"
+echo " Track jobs  : ${TRACK_PARALLEL_JOBS:-2}"
+echo " Pooled MACS : ${POOLED_MACS_PARALLEL_JOBS:-2}"
+echo " Merge jobs  : ${MERGE_PARALLEL_JOBS:-2}"
 echo "============================================================"
 
 # ── Checkpoint helpers ────────────────────────────────────────────────────────

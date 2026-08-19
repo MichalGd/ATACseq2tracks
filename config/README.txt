@@ -1,4 +1,4 @@
-ATACseq2tracks v3.2.0 configuration directory
+ATACseq2tracks v4.0.0 configuration directory
 ================================================
 
 Files

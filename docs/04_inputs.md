@@ -163,6 +163,11 @@ cCRE class meanings, expected reference construction and output columns.
 | Variable | Step | Recommended |
 |---|---|---|
 | `THREADS_PARALLEL_JOBS` | Max samples in parallel | 8 |
+| `QC_SAMPLE_PARALLEL_JOBS` | Concurrent post-alignment metric, karyogram and consensus-FRiP samples | 4 |
+| `ATAQV_PARALLEL_JOBS` | Concurrent ataqv/periodicity samples | 4 |
+| `TRACK_PARALLEL_JOBS` | Concurrent DESeq2 track-generation samples | 2 |
+| `POOLED_MACS_PARALLEL_JOBS` | Concurrent pooled MACS3 groups | 2 |
+| `MERGE_PARALLEL_JOBS` | Concurrent replicate-merge/CPM groups | 2 |
 | `THREADS_ALIGN` | Bowtie2 `-p` per sample | 16 |
 | `THREADS_SAMTOOLS` | samtools `-@` | 16 |
 | `THREADS_TRIMGALORE` | TrimGalore `--cores` | 8 |
@@ -174,7 +179,11 @@ cCRE class meanings, expected reference construction and output columns.
 > **`THREADS_DEEPTOOLS`** is required as of v3.1.0. Add it to any existing config:
 > `echo "THREADS_DEEPTOOLS=16" >> config.conf`
 
-Peak concurrent CPU usage: `THREADS_PARALLEL_JOBS × THREADS_ALIGN`
+Peak concurrent CPU usage depends on the stage. For example, ataqv can use
+`ATAQV_PARALLEL_JOBS × THREADS_ATAQV`, while DESeq2 track generation can use
+`TRACK_PARALLEL_JOBS × THREADS_BIGWIG`. Large BAM scans are frequently limited
+by storage throughput, so benchmark two and four jobs before increasing these
+values further.
 
 #### Cleanup
 

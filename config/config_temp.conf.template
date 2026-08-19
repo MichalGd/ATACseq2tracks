@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# ATACseq2tracks v3.2.0 - main configuration template
+# ATACseq2tracks v4.0.0 - main configuration template
 #
 # This is the ONLY file you need to edit before each run.
 # It can live ANYWHERE on the server (your project folder).
@@ -20,8 +20,16 @@ SAMPLESHEET="/path/to/project/config/samplesheet.csv"
 # Absolute path to the output directory (will be created if it does not exist)
 OUTPUT_DIR="/path/to/project/results/atacseq_run1"
 
-# Max parallel samples per batch stage (tune to server load; 8 is safe default)
+# Max parallel samples per early batch stage (tune to server load)
 THREADS_PARALLEL_JOBS=8
+
+# Later-stage bounded parallelism. These are independent, user-configurable
+# limits. Defaults are conservative for large BAM files and shared storage.
+QC_SAMPLE_PARALLEL_JOBS=4
+ATAQV_PARALLEL_JOBS=4
+TRACK_PARALLEL_JOBS=2
+POOLED_MACS_PARALLEL_JOBS=2
+MERGE_PARALLEL_JOBS=2
 
 # ── Server-wide reference data ── shared paths; change only if data moves ────
 
@@ -53,7 +61,7 @@ TSS_BED_HG38=""
 TSS_BED_MM39=""
 
 # ── Retired ChIPQC settings ─────────────────────────────────────────────────
-# ChIPQC settings were removed in v3.2.0; Step 10 uses deepTools and DESeq2.
+# ChIPQC settings were removed in v4.0.0; Step 10 uses deepTools and DESeq2.
 
 # ── Software paths ────────────────────────────────────────────────────────────
 PICARD_JAR="/path/to/software/picard.jar"
@@ -80,7 +88,7 @@ TRIMGALORE_EXTRA_ARGS=""
 MIN_MAPQ=30
 REMOVE_MITO=true
 ALLOW_EMPTY_FILTERED_BAM=false
-# Mixed genome builds are rejected in v3.2.0; run them separately.
+# Mixed genome builds are rejected in v4.0.0; run them separately.
 
 # Consensus support counts distinct biological sample keys after technical
 # replicates are collapsed. No one-sample union fallback is used by default.

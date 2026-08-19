@@ -1,5 +1,23 @@
 # Changelog
 
+## v4.0.0 - 2026-08-19
+
+- Promote the cumulative multi-condition, annotation, normalization,
+  correctness and performance update to the unambiguous 4.0.0 release line.
+- Update runtime banners, validation labels, templates, active documentation,
+  tests and deployment packages to 4.0.0.
+
+- Add configurable bounded sample/group parallelism for post-alignment QC,
+  ataqv/periodicity QC, DESeq2 track generation, pooled MACS3 and replicate
+  merging.
+- Preserve deterministic summary tables by merging worker-specific rows in
+  samplesheet order and propagate required child-process failures.
+- Add per-job elapsed-time tables for QC, ataqv, MACS3 and replicate merging.
+- Retain sequential DiffBind and DESeq2ATAC broad/narrow execution to avoid
+  unsafe memory and backend oversubscription.
+- Leave all track names, BedGraph locations and biological calculations
+  unchanged.
+
 ## v3.2.0 IRanges namespace hotfix - 2026-08-19
 
 - Fix fatal broad/narrow DiffBind and DESeq2ATAC annotation failures by calling

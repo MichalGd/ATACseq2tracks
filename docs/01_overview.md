@@ -2,7 +2,7 @@
 
 [← Index](README.md) | [Next: Quick start →](02_quickstart.md)
 
-ATACseq2tracks 3.2.0 is a modular, checkpoint-resumable Bash workflow for bulk ATAC-seq and related chromatin-profiling assays. One CSV samplesheet describes the libraries and one sourced configuration file defines run paths, references, tools and resource limits.
+ATACseq2tracks 4.0.0 is a modular, checkpoint-resumable Bash workflow for bulk ATAC-seq and related chromatin-profiling assays. One CSV samplesheet describes the libraries and one sourced configuration file defines run paths, references, tools and resource limits.
 
 ## Main outputs
 

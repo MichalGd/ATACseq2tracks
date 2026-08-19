@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ATACseq2tracks v3.2.0 - canonical-chromosome fragment/read CPM bigWig
+# ATACseq2tracks v4.0.0 - canonical-chromosome fragment/read CPM bigWig
 # Usage: genomecoverage_single.sh <filtered.bam> <genome> <output_dir> [PE|SE]
 set -euo pipefail
 [[ -n "${F2T_CONFIG:-}" && -f "$F2T_CONFIG" ]] || { echo "ERROR: F2T_CONFIG is not set" >&2; exit 1; }

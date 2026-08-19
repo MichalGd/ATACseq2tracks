@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ATACseq2tracks v3.2.0 - UCSC custom-track definitions for bigWig outputs
+# ATACseq2tracks v4.0.0 - UCSC custom-track definitions for bigWig outputs
 # Usage: create_ucsc_tracks.sh <bigwig_dir> [public_url_base] [description_prefix]
 set -euo pipefail
 BIGWIG_DIR="${1:?bigWig directory required}"; URL_BASE="${2:-}"; PREFIX="${3:-ATAC-seq}"

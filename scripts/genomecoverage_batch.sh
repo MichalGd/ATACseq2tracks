@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ATACseq2tracks v3.2.0 - strict fragment/read CPM bigWig batch
+# ATACseq2tracks v4.0.0 - strict fragment/read CPM bigWig batch
 set -euo pipefail
 [[ -n "${F2T_CONFIG:-}" && -f "$F2T_CONFIG" ]] || { echo "ERROR: F2T_CONFIG is not set" >&2; exit 1; }
 # shellcheck disable=SC1090

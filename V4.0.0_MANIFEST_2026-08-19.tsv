@@ -1,0 +1,23 @@
+path	purpose
+VERSION	Canonical release version set to 4.0.0
+atacseq2tracks.sh	Display effective later-stage job limits at launch
+fastq2tracks.sh	Compatibility entry point kept identical to atacseq2tracks.sh
+config/config.conf	Default configurable parallel-job limits
+config/config_temp.conf.template	Template defaults for new run configurations
+scripts/parallel_job_helpers.sh	Bounded process pool, failure collection and timing helpers
+scripts/ataqv_qc_batch.sh	Parallel ataqv, metric extraction and periodicity by sample
+scripts/post_alignment_qc_batch.sh	Parallel metrics, karyograms, consensus FRiP and DESeq2 tracks
+scripts/macs2_batch.sh	Parallel pooled MACS3 groups and MACS timing
+scripts/merge_replicates.sh	Parallel replicate-group merging and merged CPM generation
+scripts/smoke_test.sh	Validate effective positive parallel-job limits and helper presence
+tests/test_parallel_jobs.sh	Focused pool, deterministic merge, merge and MACS mock tests
+tests/test_v4_0_0_regression.sh	Current cumulative v4.0.0 regression checks
+tests/check_bash_syntax.sh	Run bounded-parallelism regression checks
+README.md	User-facing configuration and timing documentation
+docs/README.md	Documentation index and current-release pointer
+docs/04_inputs.md	Parallel setting reference and resource formulas
+docs/12_post_alignment_qc.md	QC execution, safety and timing behavior
+docs/v4.0.0_RELEASE_2026-08-19.md	Release scope, resume behavior and validation
+CHANGELOG.md	v4.0.0 release plus preserved historical release notes
+update.md	Snapshot summary link
+APPLY_V4.0.0_2026-08-19.md	Server overlay and validation instructions

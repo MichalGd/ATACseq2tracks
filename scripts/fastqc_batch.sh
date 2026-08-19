@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ATACseq2tracks v3.2.0 - fail-fast FastQC batch
+# ATACseq2tracks v4.0.0 - fail-fast FastQC batch
 # Usage: fastqc_batch.sh <input_dir> <output_dir> [parallel_jobs] [directory|samplesheet]
 set -euo pipefail
 

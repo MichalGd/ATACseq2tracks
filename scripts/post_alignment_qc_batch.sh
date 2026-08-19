@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# ATACseq2tracks v3.2.0 - post-alignment QC module (deepTools-based)
+# ATACseq2tracks v4.0.0 - post-alignment QC module (deepTools-based)
 # Replaces ChIPQC with a robust, crash-proof deepTools + samtools/bedtools QC.
 #
 # Compatible assays: ChIP-seq, CUT&RUN, CUT&Tag, ChIPmentation, ATAC-seq
@@ -53,6 +53,14 @@ TRACK_HELPERS="${SCRIPT_DIR}/track_normalization_helpers.sh"
 [[ -f "$TRACK_HELPERS" ]] || { echo "ERROR: missing track helper: $TRACK_HELPERS" >&2; exit 1; }
 # shellcheck disable=SC1090
 source "$TRACK_HELPERS"
+PARALLEL_HELPERS="${SCRIPT_DIR}/parallel_job_helpers.sh"
+[[ -f "$PARALLEL_HELPERS" ]] || { echo "ERROR: missing parallel helper: $PARALLEL_HELPERS" >&2; exit 1; }
+# shellcheck disable=SC1090
+source "$PARALLEL_HELPERS"
+QC_JOBS="${QC_SAMPLE_PARALLEL_JOBS:-4}"
+TRACK_JOBS="${TRACK_PARALLEL_JOBS:-2}"
+parallel_require_positive_integer QC_SAMPLE_PARALLEL_JOBS "$QC_JOBS" || exit 1
+parallel_require_positive_integer TRACK_PARALLEL_JOBS "$TRACK_JOBS" || exit 1
 
 # ── Output directory structure ─────────────────────────────────────────────────
 QC_TABLES="${OUT_DIR}/tables"
@@ -66,10 +74,13 @@ BIGWIG_PEAKNORM_DIR="$(dirname "$BIGWIG_DIR")/bigwig_deseq2_consensus"
 BIGWIG_ROBUST_DIR="$(dirname "$BIGWIG_DIR")/bigwig_deseq2_robust_cpm"
 mkdir -p "$QC_TABLES" "$QC_PLOTS" "$QC_CHRPLOTS" "$QC_MATRICES" \
          "$QC_LOGS" "$QC_PEAKS" "$QC_DT" "$BIGWIG_PEAKNORM_DIR" "$BIGWIG_ROBUST_DIR"
+QC_WORK_ROOT="$(mktemp -d "${OUT_DIR}/.parallel-workers.XXXXXX")"
+trap 'rm -rf "$QC_WORK_ROOT"' EXIT
 
 MAIN_LOG="${QC_LOGS}/post_qc_${TIMESTAMP}.log"
 SUMMARY_TSV="${QC_TABLES}/qc_summary.tsv"
 WARNINGS_TSV="${QC_TABLES}/qc_warnings.tsv"
+PARALLEL_TIMING_TSV="${QC_TABLES}/parallel_job_timing.tsv"
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 log()  { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$MAIN_LOG"; }
@@ -82,6 +93,8 @@ log "Peaks dir   : $PEAKS_DIR"
 log "BigWig dir  : $BIGWIG_DIR"
 log "Output dir  : $OUT_DIR"
 log "Threads     : $THREADS"
+log "QC jobs     : $QC_JOBS"
+log "Track jobs  : $TRACK_JOBS"
 
 # ── Tool checks ────────────────────────────────────────────────────────────────
 MISSING_TOOLS=()
@@ -110,6 +123,8 @@ fi
 echo -e "sample_id\tassay\tbam_file\ttotal_reads\tduplication_pct\tbl_filtered_reads\tmito_reads\tmito_pct\tn_narrow_peaks\tn_broad_peaks\tpeak_width_median\tpeak_max_signal\tfrip_narrow\tfrip_broad\tqc_status\tnotes" \
     > "$SUMMARY_TSV"
 echo -e "sample_id\twarning_type\tvalue\tthreshold\tmessage" > "$WARNINGS_TSV"
+printf 'scope\tlabel\tstart_epoch\tend_epoch\telapsed_seconds\tparallel_jobs\tthreads_per_job\tstatus\n' \
+    > "$PARALLEL_TIMING_TSV"
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 add_warning() {
@@ -120,7 +135,7 @@ add_warning() {
 
 generate_deseq2_tracks() {
     local bam="$1" key="$2" layout="$3" size_factor="$4" robust_scale="$5"
-    local consensus_count_sum="$6" cohort_geometric_mean="$7"
+    local consensus_count_sum="$6" cohort_geometric_mean="$7" metadata_row="$8"
     local genome="${SAMPLE_GENOME[$key]:-hg38}" sample tmp_dir std_bam
     local signal_count signal_unit consensus_scale output format scale label
     local consensus_bw consensus_bg robust_bw robust_bg
@@ -196,7 +211,7 @@ EOF
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "$key" "$genome" "$layout" "$signal_unit" "$signal_count" "$consensus_count_sum" \
         "$cohort_geometric_mean" "$size_factor" "$consensus_scale" "$robust_scale" \
-        >> "$TRACK_NORMALIZATION_TSV"
+        > "$metadata_row"
     log "  DESeq2 consensus and robust CPM bigWig/bedGraph tracks generated for $key"
 }
 
@@ -253,86 +268,11 @@ while IFS=',' read -r sid fq1 fq2 layout genome assay factor condition treatment
         exit 1
     fi
 
-    log "Processing: $KEY (assay=$assay genome=$genome)"
     SAMPLE_GENOME["$KEY"]="$genome"
     SAMPLE_ASSAY["$KEY"]="${assay,,}"
     SAMPLE_LAYOUT["$KEY"]="${layout^^}"
-
-    # Picard dup metrics (pre-computed in Step 5)
-    DUP_METRICS=$(find \
-        "${OUT_DIR}/../logs/picard" \
-        "${BAM_DIR}/../logs/picard" \
-        "${BAM_DIR}/../dedupBams" \
-        -name "${KEY}_dup_metrics.txt" 2>/dev/null | head -1)
-    DUP_PCT="NA"
-    if [[ -f "$DUP_METRICS" ]]; then
-        DUP_PCT=$(picard_duplication_pct "$DUP_METRICS" 2>/dev/null || echo "NA")
-    fi
-
-    TOTAL_READS=$(samtools view -c -F 4 "$BAM" 2>/dev/null || echo 0)
-
-    [[ "$TOTAL_READS" -lt 1000000 ]] && \
-        add_warning "$KEY" "LOW_READS" "$TOTAL_READS" "1000000" "Very low aligned reads (<1M)"
-    if [[ "$DUP_PCT" != "NA" ]]; then
-        dup_int=${DUP_PCT%.*}
-        [[ "$dup_int" -gt 80 ]] && \
-            add_warning "$KEY" "HIGH_DUPLICATION" "$DUP_PCT" "80" "Duplication >80%"
-    fi
-
-    # Mitochondrial reads
-    MITO_INFO=($(compute_mito_fraction "$KEY" "$BAM"))
-    MITO_READS="${MITO_INFO[0]:-NA}"
-    MITO_PCT="${MITO_INFO[1]:-NA}"
-    if [[ "${assay,,}" =~ ^atac ]]; then
-        if [[ "$MITO_PCT" != "NA" ]]; then
-            mito_int=${MITO_PCT%.*}
-            [[ "$mito_int" -ge 25 ]] && \
-                add_warning "$KEY" "HIGH_MITO_ATAC" "$MITO_PCT" "25" \
-                    "ATAC-seq mito reads ≥25% — poor nuclear accessibility or degraded sample"
-            [[ "$mito_int" -ge 10 && "$mito_int" -lt 25 ]] && \
-                add_warning "$KEY" "ELEVATED_MITO_ATAC" "$MITO_PCT" "10" \
-                    "ATAC-seq mito reads ≥10% — check sample quality"
-        fi
-    fi
-
-    # Peaks
     NARROW_PEAK="${PEAKS_DIR}/per_replicate/${KEY}/narrow/${KEY}_peaks.narrowPeak"
     BROAD_PEAK="${PEAKS_DIR}/per_replicate/${KEY}/broad/${KEY}_peaks.broadPeak"
-    N_NARROW=0; N_BROAD=0; PEAK_WIDTH_MED="NA"; PEAK_MAX_SIG="NA"
-
-    if [[ -f "$NARROW_PEAK" && -s "$NARROW_PEAK" ]]; then
-        N_NARROW=$(wc -l < "$NARROW_PEAK" 2>/dev/null || echo 0)
-        PEAK_WIDTH_MED=$(awk '{print $3-$2}' "$NARROW_PEAK" | sort -n \
-            | awk '{a[NR]=$0}END{print (NR%2==0)?(a[NR/2]+a[NR/2+1])/2:a[int(NR/2)+1]}' \
-            2>/dev/null || echo "NA")
-        PEAK_MAX_SIG=$(awk 'BEGIN{max=0}{if($7>max)max=$7}END{print max}' \
-            "$NARROW_PEAK" 2>/dev/null || echo "NA")
-    fi
-    [[ -f "$BROAD_PEAK" && -s "$BROAD_PEAK" ]] && \
-        N_BROAD=$(wc -l < "$BROAD_PEAK" 2>/dev/null || echo 0)
-
-    if [[ "$N_NARROW" -eq 0 && "$N_BROAD" -eq 0 ]]; then
-        add_warning "$KEY" "ZERO_PEAKS" "0" "1" "No peaks called (narrow or broad)"
-        QC_STATUS="NO_PEAKS"
-    elif [[ "$N_NARROW" -lt 200 && "$N_BROAD" -lt 200 ]]; then
-        add_warning "$KEY" "FEW_PEAKS" "$N_NARROW" "200" "Very few peaks (<200)"
-        QC_STATUS="POOR"
-    else
-        QC_STATUS="PASS"
-    fi
-
-    # FRiP
-    FRIP_NARROW="NA"; FRIP_BROAD="NA"
-    if [[ "$N_NARROW" -gt 0 ]]; then
-        FRIP_NARROW=$(compute_frip "$BAM" "$NARROW_PEAK")
-        if [[ "$FRIP_NARROW" != "NA" ]]; then
-            frip_pct=$(awk "BEGIN{printf \"%.0f\", $FRIP_NARROW * 100}")
-            [[ "$frip_pct" -lt 1 ]] && \
-                add_warning "$KEY" "LOW_FRIP_NARROW" "$FRIP_NARROW" "0.01" "FRiP (narrow) <1%"
-        fi
-    fi
-    [[ "$N_BROAD" -gt 0 ]] && FRIP_BROAD=$(compute_frip "$BAM" "$BROAD_PEAK")
-
     BW="${BIGWIG_DIR}/${KEY}_dedup_blFilt_CPM.bw"
     [[ ! -f "$BW" ]] && BW="${BIGWIG_DIR}/${KEY}_CPM.bw"
 
@@ -342,12 +282,113 @@ while IFS=',' read -r sid fq1 fq2 layout genome assay factor condition treatment
     SAMPLE_BROAD+=("$BROAD_PEAK")
     SAMPLE_BIGWIGS+=("$BW")
 
-    echo -e "${KEY}\t${assay}\t${BAM}\t${TOTAL_READS}\t${DUP_PCT}\t${TOTAL_READS}\t${MITO_READS}\t${MITO_PCT}\t${N_NARROW}\t${N_BROAD}\t${PEAK_WIDTH_MED}\t${PEAK_MAX_SIG}\t${FRIP_NARROW}\t${FRIP_BROAD}\t${QC_STATUS}\t" \
-        >> "$SUMMARY_TSV"
-
-    log "  $KEY: reads=$TOTAL_READS dup=$DUP_PCT mito=$MITO_PCT% narrow=$N_NARROW broad=$N_BROAD frip_n=$FRIP_NARROW"
-
 done < <(tail -n +2 "$SAMPLESHEET")
+
+PHASE1_DIR="${QC_WORK_ROOT}/phase1"
+mkdir -p "$PHASE1_DIR"
+
+metric_worker_warning() {
+    local file="$1" sid="$2" wtype="$3" val="$4" threshold="$5" message="$6"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$sid" "$wtype" "$val" "$threshold" "$message" >> "$file"
+}
+
+run_metric_worker_impl() {
+    local i="$1" key bam assay narrow broad result warnings info
+    local dup_metrics dup_pct total_reads dup_int mito_reads mito_pct mito_int
+    local n_narrow=0 n_broad=0 peak_width_med=NA peak_max_sig=NA
+    local frip_narrow=NA frip_broad=NA frip_pct qc_status
+    local -a mito_info
+    key="${SAMPLE_KEYS[$i]}"; bam="${SAMPLE_BAMS[$i]}"; assay="${SAMPLE_ASSAY[$key]}"
+    narrow="${SAMPLE_NARROW[$i]}"; broad="${SAMPLE_BROAD[$i]}"
+    result="${PHASE1_DIR}/${i}.summary"; warnings="${PHASE1_DIR}/${i}.warnings"; info="${PHASE1_DIR}/${i}.info"
+    : > "$warnings"
+
+    dup_metrics=$(find "${OUT_DIR}/../logs/picard" "${BAM_DIR}/../logs/picard" \
+        "${BAM_DIR}/../dedupBams" -name "${key}_dup_metrics.txt" 2>/dev/null | head -1 || true)
+    dup_pct=NA
+    [[ -f "$dup_metrics" ]] && dup_pct=$(picard_duplication_pct "$dup_metrics" 2>/dev/null || echo NA)
+    total_reads=$(samtools view -c -F 4 "$bam" 2>/dev/null) || return 1
+    [[ "$total_reads" -lt 1000000 ]] && metric_worker_warning "$warnings" "$key" LOW_READS \
+        "$total_reads" 1000000 "Very low aligned reads (<1M)"
+    if [[ "$dup_pct" != NA ]]; then
+        dup_int=${dup_pct%.*}
+        [[ "$dup_int" -gt 80 ]] && metric_worker_warning "$warnings" "$key" HIGH_DUPLICATION \
+            "$dup_pct" 80 "Duplication >80%"
+    fi
+
+    mito_info=($(compute_mito_fraction "$key" "$bam"))
+    mito_reads="${mito_info[0]:-NA}"; mito_pct="${mito_info[1]:-NA}"
+    if [[ "$assay" =~ ^atac && "$mito_pct" != NA ]]; then
+        mito_int=${mito_pct%.*}
+        [[ "$mito_int" -ge 25 ]] && metric_worker_warning "$warnings" "$key" HIGH_MITO_ATAC \
+            "$mito_pct" 25 "ATAC-seq mitochondrial reads >=25%"
+        [[ "$mito_int" -ge 10 && "$mito_int" -lt 25 ]] && metric_worker_warning "$warnings" "$key" ELEVATED_MITO_ATAC \
+            "$mito_pct" 10 "ATAC-seq mitochondrial reads >=10%"
+    fi
+
+    if [[ -s "$narrow" ]]; then
+        n_narrow=$(wc -l < "$narrow")
+        peak_width_med=$(awk '{print $3-$2}' "$narrow" | sort -n \
+            | awk '{a[NR]=$0}END{print (NR%2==0)?(a[NR/2]+a[NR/2+1])/2:a[int(NR/2)+1]}') || return 1
+        peak_max_sig=$(awk 'BEGIN{max=0}{if($7>max)max=$7}END{print max}' "$narrow") || return 1
+    fi
+    [[ -s "$broad" ]] && n_broad=$(wc -l < "$broad")
+    if [[ "$n_narrow" -eq 0 && "$n_broad" -eq 0 ]]; then
+        metric_worker_warning "$warnings" "$key" ZERO_PEAKS 0 1 "No peaks called (narrow or broad)"
+        qc_status=NO_PEAKS
+    elif [[ "$n_narrow" -lt 200 && "$n_broad" -lt 200 ]]; then
+        metric_worker_warning "$warnings" "$key" FEW_PEAKS "$n_narrow" 200 "Very few peaks (<200)"
+        qc_status=POOR
+    else
+        qc_status=PASS
+    fi
+
+    if [[ "$n_narrow" -gt 0 ]]; then
+        frip_narrow=$(compute_frip "$bam" "$narrow") || return 1
+        if [[ "$frip_narrow" != NA ]]; then
+            frip_pct=$(awk "BEGIN{printf \"%.0f\", $frip_narrow * 100}")
+            [[ "$frip_pct" -lt 1 ]] && metric_worker_warning "$warnings" "$key" LOW_FRIP_NARROW \
+                "$frip_narrow" 0.01 "FRiP (narrow) <1%"
+        fi
+    fi
+    [[ "$n_broad" -gt 0 ]] && frip_broad=$(compute_frip "$bam" "$broad")
+
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n' \
+        "$key" "$assay" "$bam" "$total_reads" "$dup_pct" "$total_reads" "$mito_reads" "$mito_pct" \
+        "$n_narrow" "$n_broad" "$peak_width_med" "$peak_max_sig" "$frip_narrow" "$frip_broad" "$qc_status" \
+        > "$result"
+    printf '%s: reads=%s dup=%s mito=%s%% narrow=%s broad=%s frip_n=%s\n' \
+        "$key" "$total_reads" "$dup_pct" "$mito_pct" "$n_narrow" "$n_broad" "$frip_narrow" > "$info"
+}
+
+run_metric_worker() {
+    local i="$1" key start end status=0
+    key="${SAMPLE_KEYS[$i]}"; start="$(date +%s)"
+    run_metric_worker_impl "$i" > "${PHASE1_DIR}/${i}.worker.log" 2>&1 || status=$?
+    end="$(date +%s)"
+    parallel_write_timing_row "${PHASE1_DIR}/${i}.timing" qc_metrics "$key" \
+        "$start" "$end" "$([[ $status -eq 0 ]] && echo SUCCESS || echo FAILED)" "$QC_JOBS" 1
+    return "$status"
+}
+
+parallel_pool_init "$QC_JOBS"
+for i in "${!SAMPLE_KEYS[@]}"; do
+    log "QUEUE metrics: ${SAMPLE_KEYS[$i]}"
+    parallel_pool_submit "${SAMPLE_KEYS[$i]}" run_metric_worker "$i"
+done
+phase1_status=0
+parallel_pool_wait_all || phase1_status=$?
+(( phase1_status == 0 )) || { warn "Per-sample QC job(s) failed: $(parallel_failed_labels_csv)"; exit 1; }
+
+for i in "${!SAMPLE_KEYS[@]}"; do
+    cat "${PHASE1_DIR}/${i}.summary" >> "$SUMMARY_TSV"
+    while IFS=$'\t' read -r warning_sid warning_type warning_value warning_threshold warning_message; do
+        [[ -n "$warning_sid" ]] || continue
+        add_warning "$warning_sid" "$warning_type" "$warning_value" "$warning_threshold" "$warning_message"
+    done < "${PHASE1_DIR}/${i}.warnings"
+    log "  $(cat "${PHASE1_DIR}/${i}.info")"
+    cat "${PHASE1_DIR}/${i}.timing" >> "$PARALLEL_TIMING_TSV"
+done
 
 N_SAMPLES=${#SAMPLE_KEYS[@]}
 log "Collected $N_SAMPLES IP samples"
@@ -384,68 +425,83 @@ log "=== Phase 2: Chromosome-wide karyogram plots (100 kb bins) ==="
 KARYOGRAM_BG_LIST=()    # bedGraph paths for karyogram Python script
 KARYOGRAM_LABELS=()     # corresponding labels
 
-for i in "${!SAMPLE_KEYS[@]}"; do
-    KEY="${SAMPLE_KEYS[$i]}"
-    BAM="${SAMPLE_BAMS[$i]}"
-    GENOME="${SAMPLE_GENOME[$KEY]:-hg38}"
-    declare -a KARYO_CONTIGS=() KARYO_SIGNAL_ARGS=()
-    mapfile -t KARYO_CONTIGS < <(canonical_contigs_from_bam "$BAM" "$GENOME")
-    deeptools_signal_args "${SAMPLE_LAYOUT[$KEY]}" KARYO_SIGNAL_ARGS || {
-        warn "  unsupported layout for karyogram: $KEY"
-        continue
-    }
-    if (( ${#KARYO_CONTIGS[@]} == 0 )); then
-        warn "  no canonical chromosomes for karyogram: $KEY"
-        continue
-    fi
-    KARYO_TMP="$(mktemp -d "${QC_CHRPLOTS}/.${KEY}.canonical.XXXXXX")"
-    KARYO_BAM="${KARYO_TMP}/${KEY}.canonical.bam"
-    if ! samtools view -@ "$THREADS" -b -o "$KARYO_BAM" "$BAM" "${KARYO_CONTIGS[@]}" \
-        || ! samtools index -@ "$THREADS" "$KARYO_BAM"; then
-        warn "  canonical BAM preparation failed for karyogram: $KEY"
-        rm -rf "$KARYO_TMP"
-        continue
-    fi
+PHASE2_DIR="${QC_WORK_ROOT}/phase2"
+mkdir -p "$PHASE2_DIR"
 
-    BG_OUT="${QC_CHRPLOTS}/${KEY}_100kb.bedGraph"
+run_karyogram_worker_impl() {
+    local i="$1" key bam genome bg_out chr_tsv karyo_tmp karyo_bam total
+    local -a karyo_contigs=() karyo_signal_args=()
+    key="${SAMPLE_KEYS[$i]}"; bam="${SAMPLE_BAMS[$i]}"; genome="${SAMPLE_GENOME[$key]:-hg38}"
+    bg_out="${QC_CHRPLOTS}/${key}_100kb.bedGraph"
+    chr_tsv="${QC_CHRPLOTS}/${key}_per_chrom.tsv"
+    : > "${PHASE2_DIR}/${i}.warning"
 
-    if [[ ! -f "$BG_OUT" ]]; then
-        log "  bamCoverage 100kb: $KEY"
-        if bamCoverage \
-            -b "$KARYO_BAM" \
-            --binSize 100000 \
-            --normalizeUsing RPKM \
-            --skipNonCoveredRegions \
-            --outFileFormat bedgraph \
-            "${KARYO_SIGNAL_ARGS[@]}" \
-            -p "$THREADS" \
-            -o "$BG_OUT" \
-            >> "$MAIN_LOG" 2>&1; then
-            log "  bamCoverage OK: $KEY"
-        else
-            rm -f "$BG_OUT"
-            warn "  bamCoverage FAILED: $KEY; no read-based fallback is used for fragment-standardized signal"
+    if [[ ! -s "$bg_out" ]]; then
+        mapfile -t karyo_contigs < <(canonical_contigs_from_bam "$bam" "$genome")
+        deeptools_signal_args "${SAMPLE_LAYOUT[$key]}" karyo_signal_args || {
+            echo "unsupported layout for karyogram: $key" > "${PHASE2_DIR}/${i}.warning"; return 2;
+        }
+        if (( ${#karyo_contigs[@]} == 0 )); then
+            echo "no canonical chromosomes for karyogram: $key" > "${PHASE2_DIR}/${i}.warning"
+            return 2
         fi
+        karyo_tmp="$(mktemp -d "${QC_CHRPLOTS}/.${key}.canonical.XXXXXX")"
+        karyo_bam="${karyo_tmp}/${key}.canonical.bam"
+        if ! samtools view -@ "$THREADS" -b -o "$karyo_bam" "$bam" "${karyo_contigs[@]}" \
+            || ! samtools index -@ "$THREADS" "$karyo_bam"; then
+            echo "canonical BAM preparation failed for karyogram: $key" > "${PHASE2_DIR}/${i}.warning"
+            rm -rf "$karyo_tmp"; return 2
+        fi
+        if ! bamCoverage -b "$karyo_bam" --binSize 100000 --normalizeUsing RPKM \
+            --skipNonCoveredRegions --outFileFormat bedgraph "${karyo_signal_args[@]}" \
+            -p "$THREADS" -o "$bg_out"; then
+            rm -f "$bg_out"
+            echo "bamCoverage failed for karyogram: $key" > "${PHASE2_DIR}/${i}.warning"
+            rm -rf "$karyo_tmp"; return 2
+        fi
+        rm -rf "$karyo_tmp"
     fi
-    rm -rf "$KARYO_TMP"
 
-    # Per-chromosome read count TSV (from idxstats — always fast)
-    CHR_TSV="${QC_CHRPLOTS}/${KEY}_per_chrom.tsv"
-    if [[ ! -f "$CHR_TSV" ]]; then
+    if [[ ! -s "$chr_tsv" ]]; then
+        total=$(samtools view -c -F 4 "$bam" 2>/dev/null) || return 1
         {
             echo -e "chrom\tchrom_reads\ttotal_reads\treads_per_mb"
-            total=$(samtools view -c -F 4 "$BAM" 2>/dev/null || echo 1)
-            samtools idxstats "$BAM" 2>/dev/null \
-                | awk -v tot="$total" \
-                    '$1~/^chr[0-9XY]+$/ || $1=="chrM" || $1=="MT" {
-                        rpm=($2>0)?($3/$2*1e6):0
-                        printf "%s\t%d\t%d\t%.4f\n",$1,$3,tot,rpm
-                    }'
-        } > "$CHR_TSV" 2>/dev/null
+            samtools idxstats "$bam" 2>/dev/null \
+                | awk -v tot="$total" '$1~/^chr[0-9XY]+$/ || $1=="chrM" || $1=="MT" {
+                    rpm=($2>0)?($3/$2*1e6):0
+                    printf "%s\t%d\t%d\t%.4f\n",$1,$3,tot,rpm
+                }'
+        } > "$chr_tsv"
     fi
+}
 
-    [[ -f "$BG_OUT" && -s "$BG_OUT" ]] && \
-        KARYOGRAM_BG_LIST+=("$BG_OUT") && KARYOGRAM_LABELS+=("$KEY")
+run_karyogram_worker() {
+    local i="$1" key start end status=0 reported_status
+    key="${SAMPLE_KEYS[$i]}"; start="$(date +%s)"
+    run_karyogram_worker_impl "$i" > "${PHASE2_DIR}/${i}.worker.log" 2>&1 || status=$?
+    end="$(date +%s)"
+    if (( status == 0 )); then reported_status=SUCCESS
+    elif (( status == 2 )); then reported_status=WARNING
+    else reported_status=FAILED; fi
+    parallel_write_timing_row "${PHASE2_DIR}/${i}.timing" karyogram "$key" \
+        "$start" "$end" "$reported_status" "$QC_JOBS" "$THREADS"
+    (( status == 2 )) && return 0
+    return "$status"
+}
+
+parallel_pool_init "$QC_JOBS"
+for i in "${!SAMPLE_KEYS[@]}"; do
+    log "QUEUE karyogram: ${SAMPLE_KEYS[$i]}"
+    parallel_pool_submit "${SAMPLE_KEYS[$i]}" run_karyogram_worker "$i"
+done
+phase2_status=0
+parallel_pool_wait_all || phase2_status=$?
+(( phase2_status == 0 )) || { warn "Karyogram worker(s) failed: $(parallel_failed_labels_csv)"; exit 1; }
+for i in "${!SAMPLE_KEYS[@]}"; do
+    KEY="${SAMPLE_KEYS[$i]}"; BG_OUT="${QC_CHRPLOTS}/${KEY}_100kb.bedGraph"
+    [[ -s "${PHASE2_DIR}/${i}.warning" ]] && warn "  $(cat "${PHASE2_DIR}/${i}.warning")"
+    [[ -s "$BG_OUT" ]] && KARYOGRAM_BG_LIST+=("$BG_OUT") && KARYOGRAM_LABELS+=("$KEY")
+    cat "${PHASE2_DIR}/${i}.timing" >> "$PARALLEL_TIMING_TSV"
 done
 
 # Consolidated per-chromosome table (all samples)
@@ -691,14 +747,41 @@ fi
 if [[ -f "$CONSENSUS_PEAK" && -s "$CONSENSUS_PEAK" ]]; then
     FRIP_CONSENSUS_TSV="${QC_TABLES}/frip_consensus.tsv"
     echo -e "sample_id\ttotal_reads\treads_in_consensus_peaks\tfrip_consensus" > "$FRIP_CONSENSUS_TSV"
+    FRIP_WORK_DIR="${QC_WORK_ROOT}/frip_consensus"
+    mkdir -p "$FRIP_WORK_DIR"
+
+    frip_consensus_worker_impl() {
+        local i="$1" key bam total rip frip_c
+        key="${SAMPLE_KEYS[$i]}"; bam="${SAMPLE_BAMS[$i]}"
+        [[ -f "$bam" ]] || { printf '%s\tNA\tNA\tNA\n' "$key" > "${FRIP_WORK_DIR}/${i}.row"; return 0; }
+        total=$(samtools view -c -F 4 "$bam" 2>/dev/null) || return 1
+        rip=$(bedtools intersect -u -a "$bam" -b "$CONSENSUS_PEAK" -ubam 2>/dev/null \
+            | samtools view -c 2>/dev/null) || return 1
+        frip_c=$(awk "BEGIN{if($total>0){printf \"%.4f\",$rip/$total}else{print \"NA\"}}")
+        printf '%s\t%s\t%s\t%s\n' "$key" "$total" "$rip" "$frip_c" > "${FRIP_WORK_DIR}/${i}.row"
+    }
+
+    frip_consensus_worker() {
+        local i="$1" key start end status=0
+        key="${SAMPLE_KEYS[$i]}"; start="$(date +%s)"
+        frip_consensus_worker_impl "$i" > "${FRIP_WORK_DIR}/${i}.worker.log" 2>&1 || status=$?
+        end="$(date +%s)"
+        parallel_write_timing_row "${FRIP_WORK_DIR}/${i}.timing" consensus_frip "$key" \
+            "$start" "$end" "$([[ $status -eq 0 ]] && echo SUCCESS || echo FAILED)" "$QC_JOBS" 1
+        return "$status"
+    }
+
+    parallel_pool_init "$QC_JOBS"
     for i in "${!SAMPLE_KEYS[@]}"; do
-        KEY="${SAMPLE_KEYS[$i]}"; BAM="${SAMPLE_BAMS[$i]}"
-        [[ ! -f "$BAM" ]] && echo -e "${KEY}\tNA\tNA\tNA" >> "$FRIP_CONSENSUS_TSV" && continue
-        TOTAL=$(samtools view -c -F 4 "$BAM" 2>/dev/null || echo 0)
-        RIP=$(bedtools intersect -u -a "$BAM" -b "$CONSENSUS_PEAK" -ubam 2>/dev/null \
-            | samtools view -c 2>/dev/null || echo 0)
-        FRIP_C=$(awk "BEGIN{if($TOTAL>0){printf \"%.4f\",$RIP/$TOTAL}else{print \"NA\"}}")
-        echo -e "${KEY}\t${TOTAL}\t${RIP}\t${FRIP_C}" >> "$FRIP_CONSENSUS_TSV"
+        log "QUEUE consensus FRiP: ${SAMPLE_KEYS[$i]}"
+        parallel_pool_submit "${SAMPLE_KEYS[$i]}" frip_consensus_worker "$i"
+    done
+    frip_status=0
+    parallel_pool_wait_all || frip_status=$?
+    (( frip_status == 0 )) || { warn "Consensus FRiP worker(s) failed: $(parallel_failed_labels_csv)"; exit 1; }
+    for i in "${!SAMPLE_KEYS[@]}"; do
+        cat "${FRIP_WORK_DIR}/${i}.row" >> "$FRIP_CONSENSUS_TSV"
+        cat "${FRIP_WORK_DIR}/${i}.timing" >> "$PARALLEL_TIMING_TSV"
     done
     log "FRiP consensus: $FRIP_CONSENSUS_TSV"
 
@@ -726,24 +809,51 @@ if [[ -f "$CONSENSUS_PEAK" && -s "$CONSENSUS_PEAK" ]]; then
         TRACK_NORMALIZATION_TSV="${QC_TABLES}/track_normalization_metadata.tsv"
         printf 'key\tgenome\tlayout\tsignal_unit\tcpm_normalization_count\tconsensus_count_sum\tcohort_geometric_mean_column_sum\tsize_factor\tdeseq2_consensus_scale\tdeseq2_robust_cpm_scale\n' \
             > "$TRACK_NORMALIZATION_TSV"
-        for i in "${!SAMPLE_KEYS[@]}"; do
-            KEY="${SAMPLE_KEYS[$i]}"; BAM="${SAMPLE_BAMS[$i]}"
-            SIZE_FACTOR=$(consensus_size_factor_for_key "$CONSENSUS_SIZEFACTORS_TSV" "$KEY" 2>/dev/null || true)
-            [[ -n "$SIZE_FACTOR" ]] || { warn "No valid DESeq2 size factor found for $KEY"; exit 1; }
-            ROBUST_SCALE=$(consensus_table_value_for_key "$CONSENSUS_SIZEFACTORS_TSV" "$KEY" deseq2_robust_cpm_scale 2>/dev/null || true)
-            CONSENSUS_COUNT_SUM=$(consensus_table_value_for_key "$CONSENSUS_SIZEFACTORS_TSV" "$KEY" consensus_count_sum 2>/dev/null || true)
-            COHORT_GEOMEAN=$(consensus_table_value_for_key "$CONSENSUS_SIZEFACTORS_TSV" "$KEY" cohort_geometric_mean_column_sum 2>/dev/null || true)
-            [[ -n "$ROBUST_SCALE" && -n "$CONSENSUS_COUNT_SUM" && -n "$COHORT_GEOMEAN" ]] || {
-                warn "Incomplete robust CPM metadata for $KEY"
-                exit 1
+        TRACK_WORK_DIR="${QC_WORK_ROOT}/tracks"
+        mkdir -p "$TRACK_WORK_DIR"
+
+        track_worker_impl() {
+            local i="$1" key bam size_factor robust_scale consensus_count_sum cohort_geomean
+            key="${SAMPLE_KEYS[$i]}"; bam="${SAMPLE_BAMS[$i]}"
+            size_factor=$(consensus_size_factor_for_key "$CONSENSUS_SIZEFACTORS_TSV" "$key" 2>/dev/null || true)
+            [[ -n "$size_factor" ]] || { echo "No valid DESeq2 size factor found for $key" >&2; return 1; }
+            robust_scale=$(consensus_table_value_for_key "$CONSENSUS_SIZEFACTORS_TSV" "$key" deseq2_robust_cpm_scale 2>/dev/null || true)
+            consensus_count_sum=$(consensus_table_value_for_key "$CONSENSUS_SIZEFACTORS_TSV" "$key" consensus_count_sum 2>/dev/null || true)
+            cohort_geomean=$(consensus_table_value_for_key "$CONSENSUS_SIZEFACTORS_TSV" "$key" cohort_geometric_mean_column_sum 2>/dev/null || true)
+            [[ -n "$robust_scale" && -n "$consensus_count_sum" && -n "$cohort_geomean" ]] || {
+                echo "Incomplete robust CPM metadata for $key" >&2; return 1;
             }
-            generate_deseq2_tracks "$BAM" "$KEY" "${SAMPLE_LAYOUT[$KEY]}" "$SIZE_FACTOR" \
-                "$ROBUST_SCALE" "$CONSENSUS_COUNT_SUM" "$COHORT_GEOMEAN" \
-                || { warn "DESeq2 track generation failed for $KEY"; exit 1; }
+            generate_deseq2_tracks "$bam" "$key" "${SAMPLE_LAYOUT[$key]}" "$size_factor" \
+                "$robust_scale" "$consensus_count_sum" "$cohort_geomean" "${TRACK_WORK_DIR}/${i}.metadata"
+        }
+
+        track_worker() {
+            local i="$1" key start end status=0
+            key="${SAMPLE_KEYS[$i]}"; start="$(date +%s)"
+            track_worker_impl "$i" > "${QC_LOGS}/${key}.deseq2_tracks.log" 2>&1 || status=$?
+            end="$(date +%s)"
+            parallel_write_timing_row "${TRACK_WORK_DIR}/${i}.timing" deseq2_tracks "$key" \
+                "$start" "$end" "$([[ $status -eq 0 ]] && echo SUCCESS || echo FAILED)" \
+                "$TRACK_JOBS" "${THREADS_BIGWIG:-2}"
+            return "$status"
+        }
+
+        parallel_pool_init "$TRACK_JOBS"
+        for i in "${!SAMPLE_KEYS[@]}"; do
+            log "QUEUE DESeq2 tracks: ${SAMPLE_KEYS[$i]}"
+            parallel_pool_submit "${SAMPLE_KEYS[$i]}" track_worker "$i"
+        done
+        track_status=0
+        parallel_pool_wait_all || track_status=$?
+        (( track_status == 0 )) || { warn "DESeq2 track worker(s) failed: $(parallel_failed_labels_csv)"; exit 1; }
+        for i in "${!SAMPLE_KEYS[@]}"; do
+            cat "${TRACK_WORK_DIR}/${i}.metadata" >> "$TRACK_NORMALIZATION_TSV"
+            cat "${TRACK_WORK_DIR}/${i}.timing" >> "$PARALLEL_TIMING_TSV"
         done
         log "DESeq2 consensus tracks: $BIGWIG_PEAKNORM_DIR"
         log "DESeq2 robust CPM tracks: $BIGWIG_ROBUST_DIR"
         log "Track normalization metadata: $TRACK_NORMALIZATION_TSV"
+        log "Parallel job timing: $PARALLEL_TIMING_TSV"
     else
         if [[ "${GENERATE_DESEQ2_CONSENSUS_TRACKS:-true}" == "true" ]]; then
             warn "Missing size factors or bamCoverage for required DESeq2 tracks"

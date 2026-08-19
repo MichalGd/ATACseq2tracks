@@ -159,7 +159,7 @@ THREADS_DEEPTOOLS=16
 ```
 
 The matching cCRE BED, Bowtie2 index, chromosome sizes, blacklist and GTF are
-required by the default v3.2.0 configuration. Set `RUN_CCRE_ANNOTATION=false`
+required by the default v4.0.0 configuration. Set `RUN_CCRE_ANNOTATION=false`
 to remove only the cCRE requirement while retaining GTF annotation.
 
 ---
@@ -169,7 +169,7 @@ to remove only the cCRE requirement while retaining GTF annotation.
 > **These files are no longer required for the main pipeline as of v3.1.0.**
 > Step 10 (post-alignment QC) now uses deepTools and does not need R annotation objects.
 >
-> The build instructions below are historical only. `run_chipqc.R` is not distributed in v3.2.0; use an older Git tag to reproduce v3.0.x ChIPQC results.
+> The build instructions below are historical only. `run_chipqc.R` is not distributed in v4.0.0; use an older Git tag to reproduce v3.0.x ChIPQC results.
 
 ### Build script
 

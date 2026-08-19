@@ -6,7 +6,7 @@
 
 ## Overview
 
-In v3.2.0, Step 10 combines the assay-general deepTools module with ATAC-specific `ataqv` QC. For non-control ATAC-seq samples, `ataqv` calculates ENCODE-style TSS enrichment and the short-to-mononucleosomal ratio. Paired-end samples additionally receive compact full-scan fragment histograms, nucleosome-free/mono/di/tri fractions, NFR-to-mono ratio, local peak spacing, and 300-dpi PNG plus vector PDF periodicity plots. Single-end fragment periodicity is reported as not applicable.
+In v4.0.0, Step 10 combines the assay-general deepTools module with ATAC-specific `ataqv` QC. For non-control ATAC-seq samples, `ataqv` calculates ENCODE-style TSS enrichment and the short-to-mononucleosomal ratio. Paired-end samples additionally receive compact full-scan fragment histograms, nucleosome-free/mono/di/tri fractions, NFR-to-mono ratio, local peak spacing, and 300-dpi PNG plus vector PDF periodicity plots. Single-end fragment periodicity is reported as not applicable.
 
 Step 10 of the ATACseq2tracks pipeline runs a post-alignment QC module based on
 [deepTools](https://deeptools.readthedocs.io/) and standard command-line tools.
@@ -28,6 +28,26 @@ samples with very few or zero peaks.
 **Output directory:** `qc_post_alignment/`
 
 ATAC-specific scripts are `ataqv_qc_batch.sh`, `prepare_tss_bed.py`, `extract_ataqv_metrics.py`, and `plot_fragment_periodicity.py`. Their outputs are written under `qc_post_alignment/atac_qc/`. Detailed ataqv JSON is compressed; fragment histograms contain one row per length bin rather than one row per fragment.
+
+## Bounded parallel execution
+
+Per-sample metrics, chromosome-coverage QC and consensus FRiP use
+`QC_SAMPLE_PARALLEL_JOBS=4` by default. DESeq2 consensus/robust track generation
+uses `TRACK_PARALLEL_JOBS=2`. ATAC-specific ataqv plus periodicity processing
+uses `ATAQV_PARALLEL_JOBS=4`; `mkarv` still runs once after all sample JSON files
+have completed. Each worker writes sample-specific temporary rows, and the
+parent process merges tables in samplesheet order. A failed required child job
+makes its stage fail after the other submitted jobs have been collected.
+
+Timing records are written to:
+
+- `qc_post_alignment/tables/parallel_job_timing.tsv`;
+- `qc_post_alignment/atac_qc/tables/ataqv_job_timing.tsv`.
+
+The thread settings remain per worker. In particular, maximum ataqv CPU demand
+is approximately `ATAQV_PARALLEL_JOBS × THREADS_ATAQV`, and track generation is
+approximately `TRACK_PARALLEL_JOBS × THREADS_BIGWIG`. Lower the job count first
+if shared storage becomes saturated.
 
 ---
 

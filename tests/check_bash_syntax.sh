@@ -24,10 +24,10 @@ else
   echo "OK   entry points are identical"
 fi
 
-if bash tests/test_v3_2_0_hotfix.sh; then
-  echo "OK   v3.2.0 hotfix regression checks"
+if bash tests/test_v4_0_0_regression.sh; then
+  echo "OK   v4.0.0 regression checks"
 else
-  echo "FAIL v3.2.0 hotfix regression checks"
+  echo "FAIL v4.0.0 regression checks"
   status=1
 fi
 
@@ -56,6 +56,13 @@ if bash tests/test_hg38_ccre_reference.sh; then
   echo "OK   ENCODE4 hg38 cCRE reference utility checks"
 else
   echo "FAIL ENCODE4 hg38 cCRE reference utility checks"
+  status=1
+fi
+
+if bash tests/test_parallel_jobs.sh; then
+  echo "OK   bounded parallel-job regression checks"
+else
+  echo "FAIL bounded parallel-job regression checks"
   status=1
 fi
 

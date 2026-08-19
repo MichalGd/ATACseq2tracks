@@ -19,6 +19,14 @@ else
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PARALLEL_HELPERS="${SCRIPT_DIR}/parallel_job_helpers.sh"
+[[ -f "$PARALLEL_HELPERS" ]] || { echo "ERROR: parallel helper not found: $PARALLEL_HELPERS" >&2; exit 1; }
+# shellcheck disable=SC1090
+source "$PARALLEL_HELPERS"
+ATAQV_JOBS="${ATAQV_PARALLEL_JOBS:-4}"
+ATAQV_THREADS="${THREADS_ATAQV:-8}"
+parallel_require_positive_integer ATAQV_PARALLEL_JOBS "$ATAQV_JOBS"
+parallel_require_positive_integer THREADS_ATAQV "$ATAQV_THREADS"
 TABLE_DIR="${OUT_DIR}/tables"
 PLOT_DIR="${OUT_DIR}/plots"
 METRICS_DIR="${OUT_DIR}/ataqv_metrics"
@@ -69,11 +77,13 @@ samtools idxstats "$FIRST_BAM" | awk -v maximum="$AUTOSOME_MAX" '
 
 SELECTED_METRICS="${TABLE_DIR}/ataqv_selected_metrics.tsv"
 PERIODICITY_METRICS="${TABLE_DIR}/nucleosome_periodicity_metrics.tsv"
+TIMING_TSV="${TABLE_DIR}/ataqv_job_timing.tsv"
 printf 'sample_id\tmetric_path\tvalue\n' > "$SELECTED_METRICS"
 printf 'sample_id\tmetric\tvalue\n' > "$PERIODICITY_METRICS"
+printf 'scope\tlabel\tstart_epoch\tend_epoch\telapsed_seconds\tparallel_jobs\tthreads_per_job\tstatus\n' > "$TIMING_TSV"
 
 declare -A SEEN
-declare -a JSON_FILES
+declare -a ATAQV_KEYS ATAQV_LAYOUTS ATAQV_MODES ATAQV_BAMS JSON_FILES
 while IFS=',' read -r sid fq1 fq2 layout genome assay factor condition treatment \
     cell_type rep tech_rep is_ctrl ctrl_id macs2_mode blacklist rest; do
     [[ "$sid" == "sample_id" ]] && continue
@@ -87,46 +97,92 @@ while IFS=',' read -r sid fq1 fq2 layout genome assay factor condition treatment
 
     BAM="${BAM_DIR}/${KEY}_dedup_blFilt.bam"
     [[ -f "$BAM" ]] || { echo "ERROR: filtered BAM not found: $BAM" >&2; exit 1; }
-    [[ -f "${BAM}.bai" ]] || samtools index -@ "${THREADS_ATAQV:-8}" "$BAM"
-
-    PEAK="${PEAKS_DIR}/per_replicate/${KEY}/narrow/${KEY}_peaks.narrowPeak"
-    if [[ "${macs2_mode,,}" == "broad" || ! -s "$PEAK" ]]; then
-        PEAK="${PEAKS_DIR}/per_replicate/${KEY}/broad/${KEY}_peaks.broadPeak"
-    fi
-
-    JSON="${METRICS_DIR}/${KEY}.ataqv.json.gz"
-    LOG="${LOG_DIR}/${KEY}.ataqv.log"
-    COMMAND=(ataqv --threads "${THREADS_ATAQV:-8}" --name "$KEY"
-        --metrics-file "$JSON" --tss-file "$TSS_BED"
-        --tss-extension "${ATAQV_TSS_EXTENSION:-1000}"
-        --autosomal-reference-file "$AUTOSOMES" --ignore-read-groups)
-    [[ -s "$PEAK" ]] && COMMAND+=(--peak-file "$PEAK")
-    [[ -s "$BLACKLIST" ]] && COMMAND+=(--excluded-region-file "$BLACKLIST")
-    COMMAND+=("$ORGANISM" "$BAM")
-
-    echo "[ATAC-QC] ataqv: $KEY"
-    "${COMMAND[@]}" > "$LOG" 2>&1
-    [[ -s "$JSON" ]] || { echo "ERROR: ataqv did not create metrics for $KEY" >&2; exit 1; }
-    JSON_FILES+=("$JSON")
-
-    SAMPLE_SELECTED="${TABLE_DIR}/${KEY}.ataqv_selected_metrics.tsv"
-    python3 "${SCRIPT_DIR}/extract_ataqv_metrics.py" "$JSON" "$KEY" "$SAMPLE_SELECTED"
-    tail -n +2 "$SAMPLE_SELECTED" >> "$SELECTED_METRICS"
-
-    if [[ "${layout,,}" == "pe" ]]; then
-        python3 "${SCRIPT_DIR}/plot_fragment_periodicity.py" \
-            --bam "$BAM" --sample "$KEY" --out-dir "$PLOT_DIR" \
-            --max-fragment-length "${FRAGMENT_PLOT_MAX_BP:-1000}"
-        tail -n +2 "${PLOT_DIR}/${KEY}.nucleosome_periodicity_metrics.tsv" >> "$PERIODICITY_METRICS"
-    else
-        printf '%s\tperiodicity_status\tNA_not_applicable_to_single_end\n' "$KEY" >> "$PERIODICITY_METRICS"
-    fi
+    ATAQV_KEYS+=("$KEY")
+    ATAQV_LAYOUTS+=("${layout^^}")
+    ATAQV_MODES+=("${macs2_mode,,}")
+    ATAQV_BAMS+=("$BAM")
 done < <(tail -n +2 "$SAMPLESHEET")
 
-if (( ${#JSON_FILES[@]} == 0 )); then
+if (( ${#ATAQV_KEYS[@]} == 0 )); then
     echo "[ATAC-QC] No non-control ATAC-seq samples found; nothing to do"
     exit 0
 fi
+
+WORK_DIR="$(mktemp -d "${OUT_DIR}/.ataqv-workers.XXXXXX")"
+trap 'rm -rf "$WORK_DIR"' EXIT
+
+run_ataqv_sample_impl() {
+    local i="$1" key bam layout mode peak json log sample_selected
+    local selected_rows periodicity_rows
+    local -a command
+    key="${ATAQV_KEYS[$i]}"; bam="${ATAQV_BAMS[$i]}"
+    layout="${ATAQV_LAYOUTS[$i]}"; mode="${ATAQV_MODES[$i]}"
+    selected_rows="${WORK_DIR}/${i}.selected.rows"
+    periodicity_rows="${WORK_DIR}/${i}.periodicity.rows"
+    : > "$selected_rows"; : > "$periodicity_rows"
+
+    [[ -f "${bam}.bai" ]] || samtools index -@ "$ATAQV_THREADS" "$bam" || return 1
+    peak="${PEAKS_DIR}/per_replicate/${key}/narrow/${key}_peaks.narrowPeak"
+    if [[ "$mode" == "broad" || ! -s "$peak" ]]; then
+        peak="${PEAKS_DIR}/per_replicate/${key}/broad/${key}_peaks.broadPeak"
+    fi
+
+    json="${METRICS_DIR}/${key}.ataqv.json.gz"
+    log="${LOG_DIR}/${key}.ataqv.log"
+    command=(ataqv --threads "$ATAQV_THREADS" --name "$key"
+        --metrics-file "$json" --tss-file "$TSS_BED"
+        --tss-extension "${ATAQV_TSS_EXTENSION:-1000}"
+        --autosomal-reference-file "$AUTOSOMES" --ignore-read-groups)
+    [[ -s "$peak" ]] && command+=(--peak-file "$peak")
+    [[ -s "$BLACKLIST" ]] && command+=(--excluded-region-file "$BLACKLIST")
+    command+=("$ORGANISM" "$bam")
+
+    "${command[@]}" > "$log" 2>&1 || return 1
+    [[ -s "$json" ]] || { echo "ERROR: ataqv did not create metrics for $key" >&2; return 1; }
+    sample_selected="${TABLE_DIR}/${key}.ataqv_selected_metrics.tsv"
+    python3 "${SCRIPT_DIR}/extract_ataqv_metrics.py" "$json" "$key" "$sample_selected" || return 1
+    tail -n +2 "$sample_selected" > "$selected_rows"
+
+    if [[ "$layout" == "PE" ]]; then
+        python3 "${SCRIPT_DIR}/plot_fragment_periodicity.py" \
+            --bam "$bam" --sample "$key" --out-dir "$PLOT_DIR" \
+            --max-fragment-length "${FRAGMENT_PLOT_MAX_BP:-1000}" || return 1
+        tail -n +2 "${PLOT_DIR}/${key}.nucleosome_periodicity_metrics.tsv" > "$periodicity_rows"
+    else
+        printf '%s\tperiodicity_status\tNA_not_applicable_to_single_end\n' "$key" > "$periodicity_rows"
+    fi
+}
+
+run_ataqv_sample() {
+    local i="$1" key start end status=0
+    key="${ATAQV_KEYS[$i]}"; start="$(date +%s)"
+    run_ataqv_sample_impl "$i" > "${LOG_DIR}/${key}.worker.log" 2>&1 || status=$?
+    end="$(date +%s)"
+    parallel_write_timing_row "${WORK_DIR}/${i}.timing" ataqv_sample "$key" \
+        "$start" "$end" "$([[ $status -eq 0 ]] && echo SUCCESS || echo FAILED)" \
+        "$ATAQV_JOBS" "$ATAQV_THREADS"
+    return "$status"
+}
+
+echo "[ATAC-QC] Running ${#ATAQV_KEYS[@]} samples with up to $ATAQV_JOBS concurrent jobs ($ATAQV_THREADS threads/job)"
+parallel_pool_init "$ATAQV_JOBS"
+for i in "${!ATAQV_KEYS[@]}"; do
+    echo "[ATAC-QC] queued: ${ATAQV_KEYS[$i]}"
+    parallel_pool_submit "${ATAQV_KEYS[$i]}" run_ataqv_sample "$i"
+done
+if ! parallel_pool_wait_all; then
+    echo "ERROR: ataqv sample job(s) failed: $(parallel_failed_labels_csv)" >&2
+    exit 1
+fi
+
+for i in "${!ATAQV_KEYS[@]}"; do
+    key="${ATAQV_KEYS[$i]}"
+    JSON_FILES+=("${METRICS_DIR}/${key}.ataqv.json.gz")
+    cat "${WORK_DIR}/${i}.selected.rows" >> "$SELECTED_METRICS"
+    cat "${WORK_DIR}/${i}.periodicity.rows" >> "$PERIODICITY_METRICS"
+    cat "${WORK_DIR}/${i}.timing" >> "$TIMING_TSV"
+    echo "[ATAC-QC] complete: $key"
+done
 
 if [[ "${GENERATE_ATAQV_VIEWER:-true}" == "true" ]]; then
     if command -v mkarv >/dev/null 2>&1; then
@@ -141,5 +197,6 @@ fi
 echo "[ATAC-QC] Complete"
 echo "  TSS/ataqv metrics : $SELECTED_METRICS"
 echo "  Periodicity       : $PERIODICITY_METRICS"
+echo "  Job timing        : $TIMING_TSV"
 echo "  Static plots      : $PLOT_DIR"
 echo "  Compressed JSON   : $METRICS_DIR"

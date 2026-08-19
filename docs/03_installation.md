@@ -131,7 +131,7 @@ fetchChromSizes mm39 > /path/to/mm39n.chrom.sizes
 
 See [Reference file preparation](10_reference_files.md) for the full download commands.
 
-> ChIPQC and its RDS annotation objects are not part of v3.2.0. Use an older Git tag if historical ChIPQC reproduction is required.
+> ChIPQC and its RDS annotation objects are not part of v4.0.0. Use an older Git tag if historical ChIPQC reproduction is required.
 
 ---
 
