@@ -83,25 +83,26 @@ mouse cCRE utility, but no liftOver is performed because this source is already
 native GRCh38:
 
 ```bash
-cd /home/micgdu/Analysis/workflows/ATACseq2tracks
+cd /path/to/ATACseq2tracks
 bash utilities/prepare_encode4_hg38_ccre.sh
 ```
 
 It downloads the official compressed six-column BED, requires the published
 2,348,854 records, validates canonical chromosomes, coordinates, accessions and
 cCRE classes, verifies gzip/checksum integrity, installs the file atomically,
-and writes a provenance TSV. Its default output exactly matches the configured
-path:
+and writes a provenance TSV. For a shared installation, choose a shared
+destination explicitly rather than relying on the utility's historical
+user-home default:
 
 ```text
-/home/micgdu/Analysis/utilities/UCSC/CREs/human/hg38/Supplementary-Data-1.GRCh38-cCREs-V4.bed.gz
+/opt/bioinformatics/ATACseq2tracks_shared/references/hg38/Supplementary-Data-1.GRCh38-cCREs-V4.bed.gz
 ```
 
 On another server, choose the destination explicitly:
 
 ```bash
 bash utilities/prepare_encode4_hg38_ccre.sh \
-  --output-dir /shared/references/hg38/ccre
+  --output-dir /opt/bioinformatics/ATACseq2tracks_shared/references/hg38
 ```
 
 Then set `CCRE_BED_HG38` to the reported BED path. Existing files are validated
@@ -118,7 +119,7 @@ download ENCODE3 `encodeCcreCombined.bb` for mm10, convert to BED, and lift it
 to mm39. The expected server BED is:
 
 ```text
-/home/micgdu/Analysis/utilities/UCSC/CREs/mouse/mm39/encodeCcreCombined_mm39_sorted.bed
+/opt/bioinformatics/ATACseq2tracks_shared/references/mm39/mm39.ccre.bed
 ```
 
 Record this as `ENCODE3_mm10_liftOver_mm39`, not as native mm39 ENCODE4. Human
@@ -127,9 +128,9 @@ and coordinate-generation methods differ.
 
 ```bash
 RUN_CCRE_ANNOTATION=true
-CCRE_BED_HG38="/home/micgdu/Analysis/utilities/UCSC/CREs/human/hg38/Supplementary-Data-1.GRCh38-cCREs-V4.bed.gz"
+CCRE_BED_HG38="/path/to/references/hg38/hg38.ccre.bed.gz"
 CCRE_SOURCE_HG38="ENCODE4_GRCh38_2026"
-CCRE_BED_MM39="/home/micgdu/Analysis/utilities/UCSC/CREs/mouse/mm39/encodeCcreCombined_mm39_sorted.bed"
+CCRE_BED_MM39="/path/to/references/mm39/mm39.ccre.bed"
 CCRE_SOURCE_MM39="ENCODE3_mm10_liftOver_mm39"
 ```
 
@@ -142,13 +143,19 @@ CCRE_SOURCE_MM39="ENCODE3_mm10_liftOver_mm39"
 INDEX_HG38="/path/to/indices/hg38/hg38"
 INDEX_MM39="/path/to/indices/mm39/mm39"
 
+# Optional v4.2.0 competitive host+dm6 indices
+INDEX_HG38_DM6="/opt/bioinformatics/references/composite/hg38_dm6/bowtie2/hg38_dm6"
+INDEX_MM39_DM6="/opt/bioinformatics/references/composite/mm39_dm6/bowtie2/mm39_dm6"
+
 # Chromosome sizes
 CHROM_SIZES_HUMAN="/path/to/ref/hs38n.chrom.sizes"
 CHROM_SIZES_MOUSE="/path/to/ref/mm39n.chrom.sizes"
+CHROM_SIZES_DM6="/opt/bioinformatics/references/dm6/dm6.chrom.sizes"
 
 # Blacklist BED files
 BLACKLIST_HG38="/path/to/ref/blacklist_hg38_ENCFF356LFX.bed"
 BLACKLIST_MM39="/path/to/ref/blacklist_mm39.bed"
+BLACKLIST_DM6="/opt/bioinformatics/references/dm6/dm6-blacklist.v2.bed"
 
 # Gene annotations (required for TSS QC and built-in peak annotation)
 GTF_HUMAN="/path/to/ref/gencode.hg38.annotation.gtf"
@@ -159,8 +166,15 @@ THREADS_DEEPTOOLS=16
 ```
 
 The matching cCRE BED, Bowtie2 index, chromosome sizes, blacklist and GTF are
-required by the default v4.0.0 configuration. Set `RUN_CCRE_ANNOTATION=false`
+required by the default v4.2.0 configuration. Set `RUN_CCRE_ANNOTATION=false`
 to remove only the cCRE requirement while retaining GTF annotation.
+
+The dm6 and composite resources are required only when
+`GENERATE_DROSOPHILA_SPIKEIN_STRINGENT_TRACKS=true`. Build them with
+`utilities/prepare_dm6_spikein_references.sh`; it validates all six host index
+components, standardizes fly contig names as `dm6__chr*`, builds a competitive
+index and records SHA-256 provenance. See the
+[v4.2.0 spike-in documentation](v4.2.0_DROSOPHILA_SPIKEIN_UPDATE_2026-08-20.md).
 
 ---
 

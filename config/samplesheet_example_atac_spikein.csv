@@ -1,0 +1,3 @@
+sample_id,fastq_1,fastq_2,layout,genome,assay,factor,condition,treatment,cell_type,replicate,tech_replicate,is_control,control_id,macs2_mode,blacklist,output_prefix,spikein_genome,spikein_to_host_ratio,spikein_stage
+ATAC_WT_r1,/data/ATAC_WT_r1_R1.fastq.gz,/data/ATAC_WT_r1_R2.fastq.gz,PE,hg38,ATAC-seq,accessibility,WT,vehicle,K562,1,1,FALSE,,both,/opt/bioinformatics/references/hg38/hg38.blacklist.bed,ATAC_WT_r1,dm6,1,pre_tagmentation_nuclei
+ATAC_Treated_r1,/data/ATAC_Treated_r1_R1.fastq.gz,/data/ATAC_Treated_r1_R2.fastq.gz,PE,hg38,ATAC-seq,accessibility,Treated,compound,K562,1,1,FALSE,,both,/opt/bioinformatics/references/hg38/hg38.blacklist.bed,ATAC_Treated_r1,dm6,1,pre_tagmentation_nuclei

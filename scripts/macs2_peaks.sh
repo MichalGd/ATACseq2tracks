@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ATACseq2tracks v4.0.0 - strict, layout-aware MACS3 peak calling
+# ATACseq2tracks v4.1.0 - strict, layout-aware MACS3 peak calling
 # Usage: macs2_peaks.sh <sample.bam> <control.bam|none> <out_dir> <narrow|broad|both|none> <genome> <sample_name> <PE|SE>
 set -euo pipefail
 [[ -n "${F2T_CONFIG:-}" && -f "$F2T_CONFIG" ]] || { echo "ERROR: F2T_CONFIG is not set" >&2; exit 1; }

@@ -1,5 +1,5 @@
 #!/bin/bash
-# ATACseq2tracks v4.0.0 — Unified MultiQC pipeline report wrapper
+# ATACseq2tracks v4.2.0 — Unified MultiQC pipeline report wrapper
 # Usage: bash scripts/generate_pipeline_report.sh <outDir> [reportDir] [format]
 set -euo pipefail
 _load_config() {
@@ -27,6 +27,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 python3 "${SCRIPT_DIR}/summarize_differential_accessibility.py" "$OUT_DIR" "$SUMMARY_DIR"
 DA_SUMMARY="${SUMMARY_DIR}/differential_accessibility_summary.tsv"
 DA_HTML="${SUMMARY_DIR}/differential_accessibility_summary.html"
+SPIKEIN_TABLE="${OUT_DIR}/spikein/tables/spikein_normalization.tsv"
+SPIKEIN_WARNINGS="${OUT_DIR}/spikein/tables/spikein_warnings.tsv"
+if [[ "${GENERATE_DROSOPHILA_SPIKEIN_STRINGENT_TRACKS:-false}" == "true" ]]; then
+    [[ -s "$SPIKEIN_TABLE" && -s "$SPIKEIN_WARNINGS" ]] || {
+        echo "ERROR: enabled dm6 spike-in calibration tables are missing" >&2
+        exit 1
+    }
+fi
+SPIKEIN_TABLE="${OUT_DIR}/spikein/tables/spikein_normalization.tsv"
+SPIKEIN_WARNINGS="${OUT_DIR}/spikein/tables/spikein_warnings.tsv"
+if [[ "${GENERATE_DROSOPHILA_SPIKEIN_STRINGENT_TRACKS:-false}" == "true" ]]; then
+    [[ -s "$SPIKEIN_TABLE" && -s "$SPIKEIN_WARNINGS" ]] || {
+        echo "ERROR: enabled dm6 spike-in calibration tables are missing" >&2
+        exit 1
+    }
+fi
 
 # MultiQC 1.35 can misparse deepTools plotPCA tables (null point names), merge
 # repeated plotPCA/plotCorrelation sample IDs and reject deepTools RGB triplets.
@@ -97,3 +113,11 @@ fi
 echo "Unified MultiQC report in: $REPORT_DIR"
 echo "Differential-accessibility summary: $DA_SUMMARY"
 echo "Differential-accessibility HTML: $DA_HTML"
+if [[ -s "$SPIKEIN_TABLE" ]]; then
+    echo "Drosophila spike-in normalization: $SPIKEIN_TABLE"
+    echo "Drosophila spike-in warnings: $SPIKEIN_WARNINGS"
+fi
+if [[ -s "$SPIKEIN_TABLE" ]]; then
+    echo "Drosophila spike-in normalization: $SPIKEIN_TABLE"
+    echo "Drosophila spike-in warnings: $SPIKEIN_WARNINGS"
+fi

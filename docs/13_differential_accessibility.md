@@ -243,9 +243,9 @@ not proof of regulatory activity or enhancer-to-gene links. Configure:
 
 ```bash
 RUN_CCRE_ANNOTATION=true
-CCRE_BED_HG38="/home/micgdu/Analysis/utilities/UCSC/CREs/human/hg38/Supplementary-Data-1.GRCh38-cCREs-V4.bed.gz"
+CCRE_BED_HG38="/path/to/references/hg38/hg38.ccre.bed.gz"
 CCRE_SOURCE_HG38="ENCODE4_GRCh38_2026"
-CCRE_BED_MM39="/home/micgdu/Analysis/utilities/UCSC/CREs/mouse/mm39/encodeCcreCombined_mm39_sorted.bed"
+CCRE_BED_MM39="/path/to/references/mm39/mm39.ccre.bed"
 CCRE_SOURCE_MM39="ENCODE3_mm10_liftOver_mm39"
 ```
 

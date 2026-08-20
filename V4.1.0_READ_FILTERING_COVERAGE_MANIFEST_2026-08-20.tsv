@@ -1,0 +1,51 @@
+status	path	purpose
+modified	VERSION	Set runtime release to 4.1.0
+modified	atacseq2tracks.sh	Add configurable CPM handling, checkpointed Step 10b, UCSC policy tracks and policy-BAM cleanup
+modified	fastq2tracks.sh	Maintain byte-identical compatibility entry point
+modified	config/config.conf	Enable all five families/formats by default and add switches, MAPQ and cleanup settings
+modified	config/config_temp.conf.template	Mirror the v4.1.0 default configuration
+modified	config/README.txt	Document default coverage families and switches
+added	scripts/filter_bam_for_coverage_policy.sh	Build canonical blacklist-filtered permissive/intermediate BAMs
+added	scripts/generate_filtering_sensitivity_tracks.sh	Estimate policy-specific factors and generate robust-CPM tracks/metadata
+modified	scripts/genomecoverage_single.sh	Generate configurable CPM bigWig and bedGraph outputs
+modified	scripts/genomecoverage_batch.sh	Validate/skip the configured CPM output formats
+modified	scripts/post_alignment_qc_batch.sh	Separate consensus/stringent outputs and publish explicit stringent tracks and metadata
+modified	scripts/track_normalization_helpers.sh	Add fragment/read MAPQ-bin and XS diagnostics
+modified	scripts/consensus_peak_size_factors.R	Update active release header; normalization definition unchanged
+modified	scripts/create_ucsc_tracks.sh	Recognize policy-suffixed robust tracks
+modified	scripts/smoke_test.sh	Validate v4.1.0 switches, MAPQ values, formats and new scripts
+modified	scripts/validate_samplesheet.py	Report the v4.1.0 unchanged samplesheet schema
+modified	scripts/blacklist_filter.sh	Update active release header; current filtering unchanged
+modified	scripts/blacklist_filter_batch.sh	Update active release header; current filtering unchanged
+modified	scripts/bowtie2_batch.sh	Update active release header; alignment unchanged
+modified	scripts/fastqc_batch.sh	Update active release header; FastQC unchanged
+modified	scripts/generate_pipeline_report.sh	Update active release header; reporting unchanged
+modified	scripts/macs2_batch.sh	Update active release header; peak calling unchanged
+modified	scripts/macs2_peaks.sh	Update active release header; peak calling unchanged
+modified	scripts/merge_replicates.sh	Update active release header; merging unchanged
+modified	scripts/peak_interpretation.sh	Update active release header; interpretation unchanged
+modified	scripts/picard_dedup_batch.sh	Update active release header; deduplication unchanged
+modified	scripts/plot_chrom_coverage.py	Update active release header; plotting unchanged
+modified	scripts/prepare_diffbind.R	Update active release header; DiffBind preparation unchanged
+modified	scripts/trimgalore_batch.sh	Update active release header; trimming unchanged
+added	tests/test_v4_1_0_coverage_policies.sh	Test defaults, flags, branches, filenames, metadata, formats, checkpoints and mocked orchestration
+modified	tests/test_track_normalization.sh	Require default CPM bigWig and bedGraph and Step 10b checkpoint
+modified	tests/test_parallel_jobs.sh	Validate the additional configurable policy-filter job limit
+modified	tests/check_bash_syntax.sh	Run v4.1.0 focused regression test
+added	docs/v4.1.0_READ_FILTERING_COVERAGE_UPDATE_2026-08-20.md	Scientific semantics, implementation, outputs, limitations and validation
+added	APPLY_V4.1.0_READ_FILTERING_COVERAGE_UPDATE_2026-08-20.md	Safe versioned all-user deployment procedure
+added	SHA256SUMS_V4.1.0_2026-08-20.txt	SHA-256 checksums for the complete repository contents
+modified	README.md	Document v4.1.0 workflow, outputs, defaults, flowchart and validation
+modified	CHANGELOG.md	Add v4.1.0 release changes
+modified	update.md	Set current release and point to v4.1.0 handoff documents
+modified	docs/01_overview.md	Set current release to v4.1.0
+modified	docs/02_quickstart.md	Document policy-specific robust output location
+modified	docs/03_installation.md	Clarify DESeq2 requirement for any DESeq-derived family
+modified	docs/04_inputs.md	Document all switches, MAPQ thresholds, jobs and cleanup
+modified	docs/05_running.md	Document Step 10b resume requirements
+modified	docs/06_pipeline_steps.md	Document CPM bedGraph and filtering-sensitivity stage
+modified	docs/07_outputs.md	Document five families, directories and interpretation
+modified	docs/10_reference_files.md	Set active default version to v4.1.0
+modified	docs/12_post_alignment_qc.md	Document policy-specific factors and robust semantics
+modified	docs/13_differential_accessibility.md	Remove user-home-specific cCRE example paths
+modified	docs/README.md	Index the v4.1.0 release documentation

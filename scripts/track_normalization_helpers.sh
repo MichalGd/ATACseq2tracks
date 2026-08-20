@@ -102,6 +102,41 @@ signal_count_for_bam() {
     fi
 }
 
+# Scale raw host coverage to a fixed retained dm6 observation target.  The
+# optional ratio is the declared dm6:host amount added before tagmentation;
+# multiplying by it prevents samples with deliberately different spike-in
+# additions from being treated as if they received the same reference amount.
+spikein_scale_factor() {
+    local target="$1" spikein_to_host_ratio="$2" dm6_signal_count="$3"
+    awk -v target="$target" -v ratio="$spikein_to_host_ratio" -v fly="$dm6_signal_count" '
+        BEGIN {
+            if (target <= 0 || ratio <= 0 || fly <= 0) exit 1
+            printf "%.12g\n", target * ratio / fly
+        }
+    '
+}
+
+# Print five tab-separated fragment/read diagnostics using the same PE/SE
+# observation definition as coverage: MAPQ 0, 1-9, 10-29, >=30, and XS-tagged.
+signal_mapq_bin_counts() {
+    local bam="$1" layout="${2^^}" total q1 q10 q30 xs
+    local -a args=()
+    if [[ "$layout" == "PE" ]]; then
+        args=(-f 66 -F 4)
+    elif [[ "$layout" == "SE" ]] && configured_se_signal_mode >/dev/null; then
+        args=(-F 4)
+    else
+        return 1
+    fi
+    total="$(samtools view -c "${args[@]}" "$bam")" || return 1
+    q1="$(samtools view -c -q 1 "${args[@]}" "$bam")" || return 1
+    q10="$(samtools view -c -q 10 "${args[@]}" "$bam")" || return 1
+    q30="$(samtools view -c -q 30 "${args[@]}" "$bam")" || return 1
+    xs="$(samtools view "${args[@]}" "$bam" | awk '$0 ~ /\tXS:i:/ {n++} END{print n+0}')" || return 1
+    printf '%s\t%s\t%s\t%s\t%s\n' \
+        "$((total - q1))" "$((q1 - q10))" "$((q10 - q30))" "$q30" "$xs"
+}
+
 write_scaled_coverage_track() {
     local bam="$1" output="$2" format="$3" scale="$4" layout="$5"
     local bin_size="${6:-10}" threads="${7:-2}"

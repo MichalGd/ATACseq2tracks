@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ATACseq2tracks v4.0.0 - usable-read filtering plus pair-safe blacklist removal
+# ATACseq2tracks v4.1.0 - usable-read filtering plus pair-safe blacklist removal
 # Usage: blacklist_filter.sh <input.bam> <blacklist.bed> <out_dir> <PE|SE> <genome>
 set -euo pipefail
 [[ -n "${F2T_CONFIG:-}" && -f "$F2T_CONFIG" ]] || { echo "ERROR: F2T_CONFIG is not set" >&2; exit 1; }

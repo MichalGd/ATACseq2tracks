@@ -59,10 +59,7 @@ assert_equal "$robust_scale" "$(awk "BEGIN{print $consensus_scale*$cohort_consta
 GENOME_SCRIPT="${REPO_DIR}/scripts/genomecoverage_single.sh"
 POST_SCRIPT="${REPO_DIR}/scripts/post_alignment_qc_batch.sh"
 grep -q '_CPM.bw' "$GENOME_SCRIPT" || { echo 'FAIL CPM bigWig name is missing' >&2; exit 1; }
-if grep -q '_CPM.bedGraph' "$GENOME_SCRIPT"; then
-    echo 'FAIL CPM bedGraph must not be generated' >&2
-    exit 1
-fi
+grep -q '_CPM.bedGraph' "$GENOME_SCRIPT" || { echo 'FAIL CPM bedGraph name is missing' >&2; exit 1; }
 grep -q '_DESeq2Consensus.bw' "$POST_SCRIPT" || { echo 'FAIL DESeq2 consensus bigWig name is missing' >&2; exit 1; }
 grep -q '_DESeq2Consensus.bedGraph' "$POST_SCRIPT" || { echo 'FAIL DESeq2 consensus bedGraph name is missing' >&2; exit 1; }
 grep -q '_DESeq2RobustCPM.bw' "$POST_SCRIPT" || { echo 'FAIL robust CPM bigWig name is missing' >&2; exit 1; }
@@ -73,7 +70,7 @@ echo 'OK   requested track output contract'
 
 # Execute the CPM generator with small command mocks. This verifies that PE
 # coverage and the CPM denominator use the same single-record fragment
-# definition, the expected output is non-empty, and no CPM bedGraph appears.
+# definition and both requested outputs are non-empty.
 MOCK_BIN="${TEST_TMP}/mock-bin"
 MOCK_OUT="${TEST_TMP}/mock-output"
 MOCK_LOG="${TEST_TMP}/mock-commands.log"
@@ -128,6 +125,8 @@ TRACK_BIN_SIZE=10
 THREADS_BIGWIG=1
 BAMCOVERAGE_COMMON_ARGS=""
 SE_SIGNAL_MODE="read"
+GENERATE_COVERAGE_BIGWIGS=true
+GENERATE_COVERAGE_BEDGRAPHS=true
 MOCK_CONFIG_EOF
 
 MOCK_BAM="${TEST_TMP}/sample_dedup_blFilt.bam"
@@ -137,10 +136,8 @@ PATH="${MOCK_BIN}:$PATH" F2T_CONFIG="$MOCK_CONFIG" \
 
 [[ -s "${MOCK_OUT}/sample_dedup_blFilt_CPM.bw" ]] \
     || { echo 'FAIL mocked CPM bigWig is empty or missing' >&2; exit 1; }
-if find "$MOCK_OUT" -maxdepth 1 -name '*_CPM.bedGraph' -print -quit | grep -q .; then
-    echo 'FAIL mocked CPM generation produced a bedGraph' >&2
-    exit 1
-fi
+[[ -s "${MOCK_OUT}/sample_dedup_blFilt_CPM.bedGraph" ]] \
+    || { echo 'FAIL mocked CPM bedGraph is empty or missing' >&2; exit 1; }
 grep -q 'samtools view -c -f 66 -F 4' "$MOCK_LOG" \
     || { echo 'FAIL PE CPM denominator did not count first mates once' >&2; exit 1; }
 grep -q 'bamCoverage .*--normalizeUsing CPM .*--extendReads --samFlagInclude 66' "$MOCK_LOG" \
@@ -179,13 +176,13 @@ done
 echo 'OK   non-empty DESeq2 bigWig and bedGraph output contract'
 
 ENTRYPOINT="${REPO_DIR}/atacseq2tracks.sh"
-for stage in 7 8 10 13 14; do
+for stage in 7 8 10 10b 13 14; do
     grep -q "if is_done ${stage}" "$ENTRYPOINT" \
         || { echo "FAIL checkpoint guard missing for Step ${stage}" >&2; exit 1; }
     grep -q "mark_done ${stage}" "$ENTRYPOINT" \
         || { echo "FAIL checkpoint completion missing for Step ${stage}" >&2; exit 1; }
 done
-grep -q '_dedup_blFilt_CPM.bw.*SKIP' "${REPO_DIR}/scripts/genomecoverage_batch.sh" \
+grep -q 'outputs_complete.*true' "${REPO_DIR}/scripts/genomecoverage_batch.sh" \
     || { echo 'FAIL existing non-empty CPM output skip behavior is missing' >&2; exit 1; }
 echo 'OK   checkpoint/resume and existing-output skip contract'
 

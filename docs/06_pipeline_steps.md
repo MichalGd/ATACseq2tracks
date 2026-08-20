@@ -107,6 +107,25 @@ The filtered BAMs are the starting point for all downstream steps (7–11).
 
 ---
 
+## Step 6s — Optional Drosophila spike-in calibration
+
+**Scripts:** `scripts/drosophila_spikein_tracks.sh` and
+`scripts/filter_composite_spikein_bam.sh`
+
+When `GENERATE_DROSOPHILA_SPIKEIN_STRINGENT_TRACKS=true`, trimmed reads are
+competitively aligned to the configured hg38+dm6 or mm39+dm6 composite index.
+The composite BAM is deduplicated, split by species and stringently restricted
+to primary canonical MAPQ≥30 alignments with species-matched blacklist removal.
+PE fragments are counted once; SE reads are counted once.
+
+Raw stringent host coverage is scaled by
+`SPIKEIN_SCALE_TARGET × spikein_to_host_ratio / retained_dm6_count`. This branch
+does not use DESeq2 factors. It writes `_SpikeInDM6_Stringent` bigWig/bedGraph
+tracks and complete audit tables. See the
+[v4.2.0 update note](v4.2.0_DROSOPHILA_SPIKEIN_UPDATE_2026-08-20.md).
+
+---
+
 ## Step 7 — Genome coverage tracks
 
 **Script:** `scripts/genomecoverage_batch.sh` (dispatches `genomecoverage_single.sh`)
@@ -117,8 +136,9 @@ Generates normalised coverage tracks from filtered BAMs.
 - Single-end signal uses `SE_SIGNAL_MODE="read"`: one filtered alignment record per observation, without extension or an inferred fragment
 - Canonical autosomes plus X/Y only; mitochondrial and noncanonical contigs are excluded
 - deepTools CPM with exact scaling and the same fragment/read definition in its denominator
-- Output: `bigwig/<sample_id>_bioR<N>_dedup_blFilt_CPM.bw`
-- CPM bedGraphs are not generated
+- Outputs: `bigwig/<sample_id>_bioR<N>_dedup_blFilt_CPM.{bw,bedGraph}`
+- `GENERATE_CPM_TRACKS=false` disables this coverage family; the two global
+  format switches can independently disable bigWig or bedGraph generation
 
 ---
 
@@ -129,8 +149,8 @@ Generates normalised coverage tracks from filtered BAMs.
 Groups biological replicates by `factor__condition__treatment__cell_type__genome` and generates a merged bigwig track for each group.
 
 - Uses `samtools merge` on filtered BAMs from all replicates in a group
-- Generates a single CPM bigWig for the merged BAM with the same layout-aware signal definition
-- Output: `bigwig_merged/<group_key>_CPM.bw`
+- Generates CPM bigWig and bedGraph files for the merged BAM with the same layout-aware signal definition
+- Outputs: `bigwig_merged/<group_key>_CPM.{bw,bedGraph}`
 
 ---
 
@@ -212,6 +232,31 @@ See [Post-alignment QC (deepTools)](12_post_alignment_qc.md) for full documentat
 
 ---
 
+## Step 10b — Read-filtering sensitivity coverage
+
+**Scripts:** `scripts/generate_filtering_sensitivity_tracks.sh` and
+`scripts/filter_bam_for_coverage_policy.sh`
+
+This independently checkpointed stage uses the fixed Step 10 consensus BED.
+The permissive branch filters pre-dedup Bowtie2 BAMs at MAPQ 0; the intermediate
+branch filters Picard-deduplicated BAMs at MAPQ 0. Both retain only primary,
+non-supplementary records, apply identical canonical-chromosome and blacklist
+rules, and count one proper fragment for PE data or one read for SE data.
+
+Each enabled policy obtains a separate consensus count matrix, DESeq2
+`poscounts` size factors and robust cohort constant. The stringent family uses
+the existing deduplicated `MIN_MAPQ=30` final BAM and Step 10 factor table. The
+permissive and intermediate tracks are sensitivity outputs, not replacements
+for the stringent/current production track.
+
+Outputs include policy tracks under `bigwig_deseq2_robust_cpm/<policy>/`,
+matrices and factors under `coverage_filtering_sensitivity/<policy>/`, and a
+combined filtering/scale-factor metadata table. Temporary policy BAMs are
+removed after full workflow success unless
+`KEEP_NORMALIZATION_POLICY_BAMS=true`.
+
+---
+
 ## Step 11 — DiffBind samplesheet preparation
 
 **Script:** `scripts/prepare_diffbind.R`
@@ -290,9 +335,9 @@ category precedence, cCRE sources and interpretation limits.
 
 Generates UCSC Genome Browser custom-track definitions for every bigWig family.
 
-- Processes `bigwig/`, `bigwig_deseq2_consensus/`,
-  `bigwig_deseq2_robust_cpm/`, and `bigwig_merged/` when each directory contains
-  bigWigs
+- Processes `bigwig/`, `bigwig_deseq2_consensus/`, the legacy robust directory,
+  each `bigwig_deseq2_robust_cpm/<policy>/` directory, and `bigwig_merged/`
+  whenever that directory contains bigWigs
 - Output: `ucsc_tracks.txt` inside each processed bigWig directory
 
 > You must serve the bigwig files on a web server and configure the base URL in `config.conf` before loading the trackdb into UCSC.
@@ -317,8 +362,8 @@ Generates a summary HTML report of the full pipeline run.
 Cleanup is not a checkpointed analysis step. With the default
 `ENABLE_AUTOMATIC_CLEANUP=true`, it runs only after Steps 13 and 14 complete and
 all enabled differential modules have returned successfully. The default `KEEP_*`
-policy deletes pre-dedup BAMs, trimmed FASTQs, pre-blacklist deduplicated BAMs
-and raw bedGraphs, while retaining filtered quantitative BAMs and every final
+policy deletes pre-dedup BAMs, trimmed FASTQs, pre-blacklist deduplicated BAMs,
+temporary permissive/intermediate policy BAMs and raw bedGraphs, while retaining filtered quantitative BAMs and every final
 track, peak, QC, differential result and report. A failed differential module
 still permits reporting, then causes a non-zero exit before cleanup. Set
 `ENABLE_AUTOMATIC_CLEANUP=false` to retain all intermediates.

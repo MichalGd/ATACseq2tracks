@@ -6,7 +6,7 @@
 
 ## Overview
 
-In v4.0.0, Step 10 combines the assay-general deepTools module with ATAC-specific `ataqv` QC. For non-control ATAC-seq samples, `ataqv` calculates ENCODE-style TSS enrichment and the short-to-mononucleosomal ratio. Paired-end samples additionally receive compact full-scan fragment histograms, nucleosome-free/mono/di/tri fractions, NFR-to-mono ratio, local peak spacing, and 300-dpi PNG plus vector PDF periodicity plots. Single-end fragment periodicity is reported as not applicable.
+In v4.1.0, Step 10 combines the assay-general deepTools module with ATAC-specific `ataqv` QC. For non-control ATAC-seq samples, `ataqv` calculates ENCODE-style TSS enrichment and the short-to-mononucleosomal ratio. Paired-end samples additionally receive compact full-scan fragment histograms, nucleosome-free/mono/di/tri fractions, NFR-to-mono ratio, local peak spacing, and 300-dpi PNG plus vector PDF periodicity plots. Single-end fragment periodicity is reported as not applicable.
 
 Step 10 of the ATACseq2tracks pipeline runs a post-alignment QC module based on
 [deepTools](https://deeptools.readthedocs.io/) and standard command-line tools.
@@ -216,7 +216,19 @@ Additional consensus outputs:
 
 All peak inputs are first restricted to the same canonical autosome/X/Y universe used for tracks. Paired-end peak counts use one properly paired first-mate record per fragment and extend it across the insert; single-end counts remain read-based.
 
-Two DESeq2-derived track families are generated. `*_DESeq2Consensus` multiplies raw coverage by `1 / s_j`. `*_DESeq2RobustCPM` multiplies it by `1e6 / (s_j * G)`, where `G = exp(mean(log(colSums(K))))`. This matches `DESeq2::fpm(robust=TRUE)` on the consensus count matrix. Because `1e6/G` is common to the cohort, robust CPM is only a cohort-wide unit conversion of the consensus track, not an additional sample-specific normalization.
+The current-policy `*_DESeq2Consensus` track multiplies raw coverage by
+`1 / s_j`. Each robust policy multiplies its corresponding raw coverage by
+`1e6 / (s_j * G)`, where `G = exp(mean(log(colSums(K_policy))))`. This matches
+`DESeq2::fpm(robust=TRUE)` for that policy's count matrix. Because `1e6/G` is
+common to a cohort, robust CPM is a cohort-wide unit conversion rather than an
+additional sample-specific correction.
+
+The stringent family uses the existing Picard-deduplicated, `MIN_MAPQ=30`
+filtered BAM. Step 10b adds permissive pre-dedup/MAPQ 0 and intermediate
+deduplicated/MAPQ 0 sensitivity families. All three use the same fixed consensus
+BED but separate count matrices, size factors and cohort constants. MAPQ 0
+tracks intentionally include ambiguous primary placements and should be treated
+as sensitivity outputs rather than primary biological coverage.
 
 #### Signal correlation and PCA over consensus peaks
 

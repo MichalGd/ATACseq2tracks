@@ -1,17 +1,37 @@
-# ATACseq2tracks v4.0.0 release update
+# ATACseq2tracks v4.2.0 release update
 
-**Snapshot:** ATACseq2tracks 4.0.0 release candidate
+**Snapshot:** ATACseq2tracks 4.2.0 optional Drosophila spike-in release candidate
 
 **Update date:** 2026-08-20
 
-**Scope:** Universal multi-condition differential accessibility, pair summaries,
-GTF/cCRE annotation, bounded parallelism, stable MultiQC reporting and an
-identical canonical/blacklist universe from the first DiffBind count
+Version 4.2.0 preserves the five v4.1.0 coverage families and all upstream,
+peak, QC, annotation and differential-analysis behavior. It adds one disabled-
+by-default stringent dm6 calibration family based on a competitive host+dm6
+alignment. Raw host coverage is scaled by a fixed retained-dm6 target, adjusted
+for the declared pre-tagmentation dm6:host input ratio; it is not combined with
+DESeq2 robust-CPM.
 
-The public workflow version is **4.0.0**. This major-version promotion clearly
-identifies the cumulative multi-condition, annotation, normalization,
-correctness and parallelization update while retaining prior v3.2.0 notes as
-historical provenance.
+See
+[`docs/v4.2.0_DROSOPHILA_SPIKEIN_UPDATE_2026-08-20.md`](docs/v4.2.0_DROSOPHILA_SPIKEIN_UPDATE_2026-08-20.md)
+for methods, inputs, formula, outputs, QC and limitations, and
+[`APPLY_V4.2.0_DROSOPHILA_SPIKEIN_UPDATE_2026-08-20.md`](APPLY_V4.2.0_DROSOPHILA_SPIKEIN_UPDATE_2026-08-20.md)
+for the immutable all-user deployment procedure.
+
+## Inherited v4.1.0 release notes
+
+**Snapshot:** ATACseq2tracks 4.1.0 filtering-policy coverage release candidate
+
+**Update date:** 2026-08-20
+
+**Scope:** Five configurable default coverage families, policy-specific
+consensus-count normalization and read-filtering sensitivity, layered on the
+unchanged v4.0.0 multi-condition, annotation, QC and reporting workflow.
+
+The inherited filtering-policy release is **4.1.0**. See
+[`docs/v4.1.0_READ_FILTERING_COVERAGE_UPDATE_2026-08-20.md`](docs/v4.1.0_READ_FILTERING_COVERAGE_UPDATE_2026-08-20.md)
+for filtering semantics, formulas, switches, outputs and validation, and
+[`APPLY_V4.1.0_READ_FILTERING_COVERAGE_UPDATE_2026-08-20.md`](APPLY_V4.1.0_READ_FILTERING_COVERAGE_UPDATE_2026-08-20.md)
+for versioned shared deployment.
 
 The 2026-08-19 IRanges namespace correction and server-resume instructions are
 documented in

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ATACseq2tracks v4.0.0 - UCSC custom-track definitions for bigWig outputs
+# ATACseq2tracks v4.1.0 - UCSC custom-track definitions for bigWig outputs
 # Usage: create_ucsc_tracks.sh <bigwig_dir> [public_url_base] [description_prefix]
 set -euo pipefail
 BIGWIG_DIR="${1:?bigWig directory required}"; URL_BASE="${2:-}"; PREFIX="${3:-ATAC-seq}"
@@ -8,7 +8,7 @@ TRACK_FILE="${BIGWIG_DIR}/ucsc_tracks.txt"; : > "$TRACK_FILE"; count=0
 while IFS= read -r bw; do
     file="$(basename "$bw")"; name="${file%.bw}"; url="$file"
     [[ -n "$URL_BASE" ]] && url="${URL_BASE%/}/${file}"
-    if [[ "$name" == *_DESeq2RobustCPM ]]; then
+    if [[ "$name" == *_DESeq2RobustCPM || "$name" == *_DESeq2RobustCPM_* ]]; then
         description="${PREFIX} DESeq2 robust CPM"; color="120,50,160"
     elif [[ "$name" == *_DESeq2Consensus ]]; then
         description="${PREFIX} DESeq2 consensus-peak normalized"; color="180,50,50"

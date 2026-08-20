@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ATACseq2tracks v4.0.0 - sample sheet validator
+ATACseq2tracks v4.2.0 - sample sheet validator
 Usage: python3 scripts/validate_samplesheet.py [--check-files] samplesheet.csv
 
 Schema changes:
@@ -15,9 +15,9 @@ Schema changes:
           Duplicate composite keys still fail.
           control_id cross-reference uses the unique_sids set (unchanged semantics).
 """
-import csv, sys, os, argparse
+import csv, sys, os, argparse, math
 
-# Current 17-column schema (v3.1.0+, unchanged in v4.0.0)
+# Current 17-column schema (v3.1.0+, unchanged in v4.1.0)
 REQUIRED_COLS_V31 = [
     "sample_id","fastq_1","fastq_2","layout","genome",
     "assay","factor","condition","treatment","cell_type",
@@ -33,6 +33,10 @@ REQUIRED_COLS_V30 = [
     "macs2_mode","blacklist","chipqc_annotation","output_prefix"
 ]
 
+# Optional v4.2.0 Drosophila spike-in columns. Existing 17/18-column sheets
+# remain valid when the spike-in track family is disabled.
+SPIKEIN_COLS = ["spikein_genome", "spikein_to_host_ratio", "spikein_stage"]
+
 # Columns that must be consistent within a (sample_id, replicate) tech-rep group
 CONSISTENT_COLS_V31 = [
     "layout","genome","assay","factor","condition","treatment",
@@ -45,6 +49,8 @@ VALID_LAYOUTS = {"PE","SE"}
 VALID_GENOMES = {"hg38","mm39"}
 VALID_MACS2   = {"narrow","broad","both","none"}
 VALID_ISCTR   = {"TRUE","FALSE","true","false","1","0","yes","no"}
+VALID_SPIKEIN_GENOMES = {"", "dm6"}
+VALID_SPIKEIN_STAGES = {"", "pre_tagmentation_nuclei"}
 
 def err(row, msg):  print(f"  [ERROR] row {row}: {msg}", file=sys.stderr); return 1
 def warn(row, msg): print(f"  [WARN]  row {row}: {msg}")
@@ -54,7 +60,8 @@ def detect_schema(fieldnames):
     """Return (REQUIRED_COLS, CONSISTENT_COLS, schema_version_str)."""
     if "chipqc_annotation" in fieldnames:
         return REQUIRED_COLS_V30, CONSISTENT_COLS_V30, "v3.0.x (18-column, chipqc_annotation present — accepted, ignored by pipeline)"
-    return REQUIRED_COLS_V31, CONSISTENT_COLS_V31, "v4.0.0 (17-column; compatible with v3.1.0)"
+    suffix = "; dm6 spike-in columns present" if all(c in fieldnames for c in SPIKEIN_COLS) else ""
+    return REQUIRED_COLS_V31, CONSISTENT_COLS_V31, f"v4.2.0 (17-column core; compatible with v3.1.0{suffix})"
 
 
 def main():
@@ -71,6 +78,13 @@ def main():
         fieldnames = reader.fieldnames or []
 
         required_cols, consistent_cols, schema_ver = detect_schema(fieldnames)
+        present_spikein_cols = [c for c in SPIKEIN_COLS if c in fieldnames]
+        if present_spikein_cols and len(present_spikein_cols) != len(SPIKEIN_COLS):
+            missing_spikein_cols = [c for c in SPIKEIN_COLS if c not in fieldnames]
+            print(f"[FATAL] Partial spike-in schema: add missing columns {missing_spikein_cols}", file=sys.stderr)
+            sys.exit(1)
+        if len(present_spikein_cols) == len(SPIKEIN_COLS):
+            consistent_cols = consistent_cols + SPIKEIN_COLS
         print(f"Schema detected      : {schema_ver}")
 
         missing_cols = [c for c in required_cols if c not in fieldnames]
@@ -131,6 +145,26 @@ def main():
             errors += err(i, f"Invalid genome '{row['genome']}'")
         if row["macs2_mode"].strip().lower() not in VALID_MACS2:
             errors += err(i, f"Invalid macs2_mode '{row['macs2_mode']}'")
+
+        if all(c in row for c in SPIKEIN_COLS):
+            spike_genome = row["spikein_genome"].strip().lower()
+            spike_ratio = row["spikein_to_host_ratio"].strip()
+            spike_stage = row["spikein_stage"].strip().lower()
+            if spike_genome not in VALID_SPIKEIN_GENOMES:
+                errors += err(i, f"Invalid spikein_genome '{spike_genome}' (blank or dm6)")
+            if spike_stage not in VALID_SPIKEIN_STAGES:
+                errors += err(i, "spikein_stage must be blank or pre_tagmentation_nuclei")
+            if spike_genome == "dm6":
+                try:
+                    ratio_value = float(spike_ratio)
+                    if not math.isfinite(ratio_value) or ratio_value <= 0:
+                        raise ValueError
+                except ValueError:
+                    errors += err(i, "dm6 spike-in requires a positive spikein_to_host_ratio")
+                if spike_stage != "pre_tagmentation_nuclei":
+                    errors += err(i, "dm6 spike-in requires spikein_stage=pre_tagmentation_nuclei")
+            elif spike_ratio or spike_stage:
+                errors += err(i, "spike-in ratio/stage supplied while spikein_genome is blank")
 
         is_ctr = row["is_control"].strip()
         if is_ctr not in VALID_ISCTR:

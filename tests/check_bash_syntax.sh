@@ -45,6 +45,20 @@ else
   status=1
 fi
 
+if bash tests/test_v4_1_0_coverage_policies.sh; then
+  echo "OK   inherited v4.1.0 coverage-policy regression checks"
+else
+  echo "FAIL inherited v4.1.0 coverage-policy regression checks"
+  status=1
+fi
+
+if bash tests/test_v4_2_0_spikein.sh; then
+  echo "OK   v4.2.0 Drosophila spike-in regression checks"
+else
+  echo "FAIL v4.2.0 Drosophila spike-in regression checks"
+  status=1
+fi
+
 if bash tests/test_differential_accessibility.sh; then
   echo "OK   differential accessibility regression checks"
 else

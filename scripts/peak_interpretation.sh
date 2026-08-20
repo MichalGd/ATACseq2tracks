@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ATACseq2tracks v4.0.0 - optional HOMER annotation and motif enrichment
+# ATACseq2tracks v4.1.0 - optional HOMER annotation and motif enrichment
 # Usage: peak_interpretation.sh <consensus_peaks.bed> <hg38|mm39> <output_dir>
 set -euo pipefail
 [[ -n "${F2T_CONFIG:-}" && -f "$F2T_CONFIG" ]] || { echo "ERROR: F2T_CONFIG is not set" >&2; exit 1; }

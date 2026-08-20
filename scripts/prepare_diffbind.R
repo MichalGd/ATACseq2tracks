@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # =============================================================================
-# ATACseq2tracks v4.0.0 — DiffBind sample sheet preparation (narrow + broad)
+# ATACseq2tracks v4.1.0 — DiffBind sample sheet preparation (narrow + broad)
 # Usage: Rscript scripts/prepare_diffbind.R <ss.csv> <bamDir> <peaksDir> <outDir> <genome>
 # Produces: diffbind_samplesheet_<genome>_narrow.csv
 #           diffbind_samplesheet_<genome>_broad.csv

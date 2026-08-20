@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ATACseq2tracks v4.0.0 - merge filtered biological samples for group-level CPM tracks
+# ATACseq2tracks v4.1.0 - merge filtered biological samples for group-level CPM tracks
 set -euo pipefail
 [[ -n "${F2T_CONFIG:-}" && -f "$F2T_CONFIG" ]] || { echo "ERROR: F2T_CONFIG is not set" >&2; exit 1; }
 # shellcheck disable=SC1090

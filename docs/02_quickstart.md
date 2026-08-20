@@ -103,7 +103,7 @@ tail -f /path/to/my_project/run.log
 |---|---|
 | CPM bigWigs | `analysis/bigwig/` |
 | DESeq2 consensus bigWig/bedGraph tracks | `analysis/bigwig_deseq2_consensus/` |
-| DESeq2 robust-CPM bigWig/bedGraph tracks | `analysis/bigwig_deseq2_robust_cpm/` |
+| DESeq2 robust-CPM permissive/intermediate/stringent tracks | `analysis/bigwig_deseq2_robust_cpm/<policy>/` |
 | Merged tracks | `analysis/bigwig_merged/` |
 | Peaks (narrow + broad) | `analysis/peaks/per_replicate/` |
 | Post-alignment QC | `analysis/qc_post_alignment/` |

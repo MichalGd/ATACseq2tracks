@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ATACseq2tracks v4.0.0 - Trim Galore batch with strict input and job validation
+# ATACseq2tracks v4.1.0 - Trim Galore batch with strict input and job validation
 set -euo pipefail
 
 [[ -n "${F2T_CONFIG:-}" && -f "$F2T_CONFIG" ]] || { echo "ERROR: F2T_CONFIG is not set" >&2; exit 1; }

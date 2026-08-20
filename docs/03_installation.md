@@ -78,7 +78,8 @@ install.packages(c("ggplot2", "dplyr"))
 
 Minimum R version: **4.3**
 
-> Disabling DiffBind does not remove the R requirement when `GENERATE_DESEQ2_CONSENSUS_TRACKS=true`.
+> Disabling DiffBind does not remove the R/DESeq2 requirement while any
+> DESeq2Consensus or DESeq2 robust-CPM coverage family is enabled.
 
 ---
 

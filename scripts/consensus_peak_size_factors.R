@@ -1,5 +1,5 @@
 #!/usr/bin/env Rscript
-# ATACseq2tracks v4.0.0 - DESeq2 size factors from consensus-peak fragment/read counts
+# ATACseq2tracks v4.1.0 - DESeq2 size factors from consensus-peak fragment/read counts
 suppressPackageStartupMessages(library(DESeq2))
 
 args <- commandArgs(trailingOnly = TRUE)

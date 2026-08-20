@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# ATACseq2tracks v4.0.0 - post-alignment QC module (deepTools-based)
+# ATACseq2tracks v4.1.0 - post-alignment QC module (deepTools-based)
 # Replaces ChIPQC with a robust, crash-proof deepTools + samtools/bedtools QC.
 #
 # Compatible assays: ChIP-seq, CUT&RUN, CUT&Tag, ChIPmentation, ATAC-seq
@@ -72,8 +72,10 @@ QC_PEAKS="${OUT_DIR}/peak_sets"
 QC_DT="${OUT_DIR}/deeptools"
 BIGWIG_PEAKNORM_DIR="$(dirname "$BIGWIG_DIR")/bigwig_deseq2_consensus"
 BIGWIG_ROBUST_DIR="$(dirname "$BIGWIG_DIR")/bigwig_deseq2_robust_cpm"
+BIGWIG_ROBUST_STRINGENT_DIR="${BIGWIG_ROBUST_DIR}/stringent"
 mkdir -p "$QC_TABLES" "$QC_PLOTS" "$QC_CHRPLOTS" "$QC_MATRICES" \
-         "$QC_LOGS" "$QC_PEAKS" "$QC_DT" "$BIGWIG_PEAKNORM_DIR" "$BIGWIG_ROBUST_DIR"
+         "$QC_LOGS" "$QC_PEAKS" "$QC_DT" "$BIGWIG_PEAKNORM_DIR" \
+         "$BIGWIG_ROBUST_DIR" "$BIGWIG_ROBUST_STRINGENT_DIR"
 QC_WORK_ROOT="$(mktemp -d "${OUT_DIR}/.parallel-workers.XXXXXX")"
 trap 'rm -rf "$QC_WORK_ROOT"' EXIT
 
@@ -137,9 +139,8 @@ generate_deseq2_tracks() {
     local bam="$1" key="$2" layout="$3" size_factor="$4" robust_scale="$5"
     local consensus_count_sum="$6" cohort_geometric_mean="$7" metadata_row="$8"
     local genome="${SAMPLE_GENOME[$key]:-hg38}" sample tmp_dir std_bam
-    local signal_count signal_unit consensus_scale output format scale label
-    local consensus_bw consensus_bg robust_bw robust_bg
-    local consensus_bw_tmp consensus_bg_tmp robust_bw_tmp robust_bg_tmp
+    local signal_count signal_unit consensus_scale final_output temp_output mapq_bins consensus_sha
+    local consensus_bw consensus_bg robust_bw robust_bg legacy_bw legacy_bg
     local -a std_chr=()
     sample=$(basename "$bam" .bam)
 
@@ -179,40 +180,53 @@ generate_deseq2_tracks() {
         rm -rf "$tmp_dir"
         return 1
     fi
+    mapq_bins="$(signal_mapq_bin_counts "$std_bam" "$layout")"
+    consensus_sha="$(sha256sum "$CONSENSUS_PEAK" | awk '{print $1}')"
 
     consensus_scale=$(awk "BEGIN {printf \"%.12g\", 1/$size_factor}")
-    consensus_bw="${BIGWIG_PEAKNORM_DIR}/${sample}_DESeq2Consensus.bw"
-    consensus_bg="${BIGWIG_PEAKNORM_DIR}/${sample}_DESeq2Consensus.bedGraph"
-    robust_bw="${BIGWIG_ROBUST_DIR}/${sample}_DESeq2RobustCPM.bw"
-    robust_bg="${BIGWIG_ROBUST_DIR}/${sample}_DESeq2RobustCPM.bedGraph"
-    consensus_bw_tmp="${tmp_dir}/$(basename "$consensus_bw")"
-    consensus_bg_tmp="${tmp_dir}/$(basename "$consensus_bg")"
-    robust_bw_tmp="${tmp_dir}/$(basename "$robust_bw")"
-    robust_bg_tmp="${tmp_dir}/$(basename "$robust_bg")"
-
-    while IFS=$'\t' read -r output format scale label; do
-        if ! write_scaled_coverage_track "$std_bam" "$output" "$format" "$scale" "$layout" \
+    write_track() {
+        local destination="$1" format="$2" scale="$3" label="$4"
+        temp_output="${tmp_dir}/$(basename "$destination")"
+        if ! write_scaled_coverage_track "$std_bam" "$temp_output" "$format" "$scale" "$layout" \
             "${TRACK_BIN_SIZE:-10}" "${THREADS_BIGWIG:-2}"; then
             warn "bamCoverage failed for $label: $key"
-            rm -rf "$tmp_dir"
             return 1
         fi
-    done <<EOF
-$consensus_bw_tmp	bigwig	$consensus_scale	DESeq2-consensus
-$consensus_bg_tmp	bedgraph	$consensus_scale	DESeq2-consensus
-$robust_bw_tmp	bigwig	$robust_scale	DESeq2-robust-CPM
-$robust_bg_tmp	bedgraph	$robust_scale	DESeq2-robust-CPM
-EOF
-    mv -f "$consensus_bw_tmp" "$consensus_bw"
-    mv -f "$consensus_bg_tmp" "$consensus_bg"
-    mv -f "$robust_bw_tmp" "$robust_bw"
-    mv -f "$robust_bg_tmp" "$robust_bg"
+        mv -f "$temp_output" "$destination"
+    }
+
+    if [[ "${GENERATE_DESEQ2_CONSENSUS_TRACKS:-true}" == "true" ]]; then
+        if [[ "${GENERATE_COVERAGE_BIGWIGS:-true}" == "true" ]]; then
+            consensus_bw="${BIGWIG_PEAKNORM_DIR}/${sample}_DESeq2Consensus.bw"
+            write_track "$consensus_bw" bigwig "$consensus_scale" DESeq2-consensus || { rm -rf "$tmp_dir"; return 1; }
+        fi
+        if [[ "${GENERATE_COVERAGE_BEDGRAPHS:-true}" == "true" ]]; then
+            consensus_bg="${BIGWIG_PEAKNORM_DIR}/${sample}_DESeq2Consensus.bedGraph"
+            write_track "$consensus_bg" bedgraph "$consensus_scale" DESeq2-consensus || { rm -rf "$tmp_dir"; return 1; }
+        fi
+    fi
+
+    if [[ "${GENERATE_DESEQ2_ROBUST_CPM_STRINGENT_TRACKS:-true}" == "true" ]]; then
+        if [[ "${GENERATE_COVERAGE_BIGWIGS:-true}" == "true" ]]; then
+            robust_bw="${BIGWIG_ROBUST_STRINGENT_DIR}/${key}_DESeq2RobustCPM_Stringent.bw"
+            legacy_bw="${BIGWIG_ROBUST_DIR}/${sample}_DESeq2RobustCPM.bw"
+            write_track "$robust_bw" bigwig "$robust_scale" DESeq2-robust-CPM-stringent || { rm -rf "$tmp_dir"; return 1; }
+            cp -f "$robust_bw" "$legacy_bw"
+        fi
+        if [[ "${GENERATE_COVERAGE_BEDGRAPHS:-true}" == "true" ]]; then
+            robust_bg="${BIGWIG_ROBUST_STRINGENT_DIR}/${key}_DESeq2RobustCPM_Stringent.bedGraph"
+            legacy_bg="${BIGWIG_ROBUST_DIR}/${sample}_DESeq2RobustCPM.bedGraph"
+            write_track "$robust_bg" bedgraph "$robust_scale" DESeq2-robust-CPM-stringent || { rm -rf "$tmp_dir"; return 1; }
+            cp -f "$robust_bg" "$legacy_bg"
+        fi
+    fi
     rm -rf "$tmp_dir"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "$key" "$genome" "$layout" "$signal_unit" "$signal_count" "$consensus_count_sum" \
-        "$cohort_geometric_mean" "$size_factor" "$consensus_scale" "$robust_scale" \
+    printf '%s\tstringent\tfilteredBams\tremoved_by_Picard\tone_primary_default\t%s\texcluded\texcluded\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$key" "${MIN_MAPQ:-30}" "$genome" "$layout" "$signal_unit" "$signal_count" \
+        $mapq_bins "$consensus_sha" "$consensus_count_sum" "$cohort_geometric_mean" \
+        "$size_factor" "$consensus_scale" "$robust_scale" \
         > "$metadata_row"
-    log "  DESeq2 consensus and robust CPM bigWig/bedGraph tracks generated for $key"
+    log "  Enabled DESeq2 consensus/stringent robust-CPM tracks generated for $key"
 }
 
 compute_frip() {
@@ -665,8 +679,19 @@ if [[ -s "$CONSENSUS_SUPPORTED" ]]; then
     log "Consensus peaks: $(wc -l < "$CONSENSUS_PEAK") regions"
 fi
 
-if [[ "${GENERATE_DESEQ2_CONSENSUS_TRACKS:-true}" == "true" && ! -s "$CONSENSUS_PEAK" ]]; then
-    warn "DESeq2 consensus-track generation requires a non-empty consensus peak set"
+CURRENT_DESEQ2_TRACKS_REQUIRED=false
+if [[ "${GENERATE_DESEQ2_CONSENSUS_TRACKS:-true}" == "true" || \
+      "${GENERATE_DESEQ2_ROBUST_CPM_STRINGENT_TRACKS:-true}" == "true" ]]; then
+    CURRENT_DESEQ2_TRACKS_REQUIRED=true
+fi
+ANY_DESEQ2_TRACKS_REQUIRED="$CURRENT_DESEQ2_TRACKS_REQUIRED"
+if [[ "${GENERATE_DESEQ2_ROBUST_CPM_PERMISSIVE_TRACKS:-true}" == "true" || \
+      "${GENERATE_DESEQ2_ROBUST_CPM_INTERMEDIATE_TRACKS:-true}" == "true" ]]; then
+    ANY_DESEQ2_TRACKS_REQUIRED=true
+fi
+
+if [[ "$ANY_DESEQ2_TRACKS_REQUIRED" == "true" && ! -s "$CONSENSUS_PEAK" ]]; then
+    warn "Enabled DESeq2 coverage families require a non-empty consensus peak set"
     exit 1
 fi
 
@@ -790,7 +815,8 @@ if [[ -f "$CONSENSUS_PEAK" && -s "$CONSENSUS_PEAK" ]]; then
     CONSENSUS_NORM_COUNTS_TSV="${QC_MATRICES}/consensus_peak_normCounts.tsv"
 
     R_SCRIPT="${R_BIN:-Rscript}"
-    if command -v "$R_SCRIPT" >/dev/null 2>&1 && [[ -f "${QC_MATRICES}/multiBamSummary_peaks.tab" ]]; then
+    if [[ "$CURRENT_DESEQ2_TRACKS_REQUIRED" == "true" ]] && \
+       command -v "$R_SCRIPT" >/dev/null 2>&1 && [[ -f "${QC_MATRICES}/multiBamSummary_peaks.tab" ]]; then
         "$R_SCRIPT" "${SCRIPT_DIR}/consensus_peak_size_factors.R" \
             "$SAMPLESHEET" "${QC_MATRICES}/multiBamSummary_peaks.tab" "${QC_TABLES}" \
             "$CONSENSUS_COUNTS_TSV" "$CONSENSUS_NORM_COUNTS_TSV" \
@@ -798,16 +824,17 @@ if [[ -f "$CONSENSUS_PEAK" && -s "$CONSENSUS_PEAK" ]]; then
         && log "Consensus peak count matrix + DESeq2 size factors written" \
         || { warn "Consensus peak size factor estimation failed"; exit 1; }
     else
-        if [[ "${GENERATE_DESEQ2_CONSENSUS_TRACKS:-true}" == "true" ]]; then
+        if [[ "$CURRENT_DESEQ2_TRACKS_REQUIRED" == "true" ]]; then
             warn "Rscript or consensus peak-count matrix is unavailable"
             exit 1
         fi
     fi
 
-    if [[ -s "$CONSENSUS_SIZEFACTORS_TSV" ]] && command -v bamCoverage >/dev/null 2>&1; then
+    if [[ "$CURRENT_DESEQ2_TRACKS_REQUIRED" == "true" && -s "$CONSENSUS_SIZEFACTORS_TSV" ]] && \
+       command -v bamCoverage >/dev/null 2>&1; then
         log "=== Phase 5: DESeq2 consensus and robust CPM bigWig/bedGraph generation ==="
         TRACK_NORMALIZATION_TSV="${QC_TABLES}/track_normalization_metadata.tsv"
-        printf 'key\tgenome\tlayout\tsignal_unit\tcpm_normalization_count\tconsensus_count_sum\tcohort_geometric_mean_column_sum\tsize_factor\tdeseq2_consensus_scale\tdeseq2_robust_cpm_scale\n' \
+        printf 'key\tpolicy\tsource_bam_stage\tduplicate_policy\tbowtie2_reporting\tminimum_mapq\tsecondary_alignments\tsupplementary_alignments\tgenome\tlayout\tsignal_unit\tsignal_count\tmapq_0\tmapq_1_9\tmapq_10_29\tmapq_ge_30\txs_tagged_signal_records\tconsensus_peak_sha256\tconsensus_count_sum\tcohort_geometric_mean_column_sum\tsize_factor\tdeseq2_consensus_scale\tdeseq2_robust_cpm_scale\n' \
             > "$TRACK_NORMALIZATION_TSV"
         TRACK_WORK_DIR="${QC_WORK_ROOT}/tracks"
         mkdir -p "$TRACK_WORK_DIR"
@@ -851,11 +878,11 @@ if [[ -f "$CONSENSUS_PEAK" && -s "$CONSENSUS_PEAK" ]]; then
             cat "${TRACK_WORK_DIR}/${i}.timing" >> "$PARALLEL_TIMING_TSV"
         done
         log "DESeq2 consensus tracks: $BIGWIG_PEAKNORM_DIR"
-        log "DESeq2 robust CPM tracks: $BIGWIG_ROBUST_DIR"
+        log "DESeq2 stringent robust CPM tracks: $BIGWIG_ROBUST_STRINGENT_DIR"
         log "Track normalization metadata: $TRACK_NORMALIZATION_TSV"
         log "Parallel job timing: $PARALLEL_TIMING_TSV"
     else
-        if [[ "${GENERATE_DESEQ2_CONSENSUS_TRACKS:-true}" == "true" ]]; then
+        if [[ "$CURRENT_DESEQ2_TRACKS_REQUIRED" == "true" ]]; then
             warn "Missing size factors or bamCoverage for required DESeq2 tracks"
             exit 1
         fi

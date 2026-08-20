@@ -49,7 +49,8 @@ grep -q 'TRACK_PARALLEL_JOBS:-2' "${ROOT}/scripts/post_alignment_qc_batch.sh" ||
 grep -q 'ATAQV_PARALLEL_JOBS:-4' "${ROOT}/scripts/ataqv_qc_batch.sh" || fail "ataqv default missing"
 grep -q 'POOLED_MACS_PARALLEL_JOBS:-2' "${ROOT}/scripts/macs2_batch.sh" || fail "pooled MACS default missing"
 grep -q 'MERGE_PARALLEL_JOBS:-2' "${ROOT}/scripts/merge_replicates.sh" || fail "merge default missing"
-ok "all five configurable defaults are wired into their batch stages"
+grep -q 'COVERAGE_FILTER_PARALLEL_JOBS:-' "${ROOT}/scripts/generate_filtering_sensitivity_tracks.sh" || fail "coverage-filter default missing"
+ok "all six configurable defaults are wired into their batch stages"
 
 mock_bin="${tmp}/bin"
 mkdir -p "$mock_bin" "${tmp}/bams" "${tmp}/merge_out" "${tmp}/peaks"

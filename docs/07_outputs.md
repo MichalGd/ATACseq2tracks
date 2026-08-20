@@ -6,7 +6,7 @@
 
 ## Output directory tree
 
-> Track naming: CPM tracks end in `_CPM.bw`. Consensus-scaled files are stored in `bigwig_deseq2_consensus/` as `_DESeq2Consensus.{bw,bedGraph}`; robust CPM files are stored in `bigwig_deseq2_robust_cpm/` as `_DESeq2RobustCPM.{bw,bedGraph}`. CPM bedGraphs are not generated.
+> Track naming: CPM tracks use `_CPM.{bw,bedGraph}`. Consensus-scaled files use `_DESeq2Consensus.{bw,bedGraph}`. Robust filtering-policy tracks are stored under `bigwig_deseq2_robust_cpm/<permissive|intermediate|stringent>/` with the policy in the suffix. The legacy `_DESeq2RobustCPM.{bw,bedGraph}` stringent alias is retained for compatibility. Optional dm6-calibrated tracks use `_SpikeInDM6_Stringent.{bw,bedGraph}`.
 
 ```
 <OUTPUT_DIR>/
@@ -37,8 +37,9 @@
 ├── filteredBams/                      # BAMs after blacklist filtering
 │   └── <sample_id>_bioR<N>_dedup_blFilt.bam
 │
-├── bigwig/                            # Per-replicate fragment/read CPM bigWigs
+├── bigwig/                            # Per-replicate fragment/read CPM tracks
 │   ├── <sample_id>_bioR<N>_dedup_blFilt_CPM.bw
+│   ├── <sample_id>_bioR<N>_dedup_blFilt_CPM.bedGraph
 │   └── ucsc_tracks.txt
 │
 ├── bigwig_deseq2_consensus/           # Reciprocal-size-factor coverage
@@ -49,10 +50,28 @@
 ├── bigwig_deseq2_robust_cpm/          # DESeq2 robust CPM/FPM-style coverage
 │   ├── <sample_id>_bioR<N>_dedup_blFilt_DESeq2RobustCPM.bw
 │   ├── <sample_id>_bioR<N>_dedup_blFilt_DESeq2RobustCPM.bedGraph
+│   ├── permissive/*_DESeq2RobustCPM_Permissive.{bw,bedGraph}
+│   ├── intermediate/*_DESeq2RobustCPM_Intermediate.{bw,bedGraph}
+│   ├── stringent/*_DESeq2RobustCPM_Stringent.{bw,bedGraph}
 │   └── ucsc_tracks.txt
 │
-├── bigwig_merged/                     # Condition-group merged bigwig tracks
-│   ├── <factor>_<condition>_<treatment>_<cell_type>_merged_CPM.bw
+├── coverage_filtering_sensitivity/
+│   ├── track_normalization_metadata.tsv
+│   ├── permissive/{matrices,tables}/
+│   └── intermediate/{matrices,tables}/
+│
+├── bigwig_spikein/stringent/           # Optional dm6-calibrated stringent host tracks
+│   ├── <sample_id>_bioR<N>_SpikeInDM6_Stringent.bw
+│   └── <sample_id>_bioR<N>_SpikeInDM6_Stringent.bedGraph
+│
+├── spikein/
+│   ├── tables/spikein_normalization.tsv
+│   ├── tables/spikein_warnings.tsv
+│   ├── tables/spikein_provenance.tsv
+│   └── logs/
+│
+├── bigwig_merged/                     # Condition-group merged CPM tracks
+│   ├── <factor>_<condition>_<treatment>_<cell_type>_merged_CPM.{bw,bedGraph}
 │   └── ucsc_tracks.txt
 │
 ├── peaks/
@@ -136,7 +155,14 @@ BigWig files (`.bw`) contain binned coverage under the normalization named in ea
 - [IGV](https://igv.org/)
 - [deepTools](https://deeptools.readthedocs.io/) for heatmaps and profile plots
 
-For paired-end samples, coverage represents fragments counted once and extended over their inserts; single-end coverage represents reads. All three families use canonical autosomes plus X/Y. Robust CPM is the consensus-scaled track multiplied by one cohort-wide constant, so it does not add a new between-sample correction. The DESeq2 families are cohort-dependent and should not be treated as absolutely comparable across independently normalized studies.
+For paired-end samples, coverage represents fragments counted once and extended over their inserts; single-end coverage represents reads. All five families use canonical autosomes plus X/Y. All robust policies use the same fixed consensus BED but obtain separate count matrices, DESeq2 size factors and cohort constants. Within one policy, robust CPM is a cohort-wide rescaling of its DESeq2-consensus signal. The permissive and intermediate tracks are sensitivity outputs; none of the DESeq2 families is an absolute cross-study calibration.
+
+The optional dm6 family is external-reference calibration rather than DESeq2
+normalization. It scales raw stringent host coverage by
+`SPIKEIN_SCALE_TARGET × spikein_to_host_ratio / retained_dm6_observations`.
+Interpret it only with `spikein_normalization.tsv` and `spikein_warnings.tsv`.
+It can support global-shift comparisons when the reference was added correctly,
+but it does not remove study or protocol batch effects.
 
 ### MACS2 peak files
 

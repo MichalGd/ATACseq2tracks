@@ -1,4 +1,4 @@
-ATACseq2tracks v4.0.0 configuration directory
+ATACseq2tracks v4.2.0 configuration directory
 ================================================
 
 Files
@@ -8,6 +8,8 @@ config_temp.conf.template   Identical compatibility template.
 samplesheet_template.csv    Column header template.
 samplesheet_example_atac.csv
                             Recommended bulk ATAC-seq example.
+samplesheet_example_atac_spikein.csv
+                            Optional dm6 spike-in declaration example.
 samplesheet_example.csv     Historical multi-assay example retained from v3.1.
 
 Setup
@@ -25,7 +27,13 @@ Setup
    taken from first samplesheet appearance and all eligible pairs are analyzed.
 7. Cleanup is enabled after full success. Set ENABLE_AUTOMATIC_CLEANUP=false
    before the run if every intermediate must be retained.
-8. Run the main entry point with:
+8. All five coverage families and both bigWig/bedGraph formats are enabled by
+   default. Set an individual GENERATE_*_TRACKS switch to false to disable that
+   family. Disabling permissive/intermediate also skips its BAM filtering.
+9. dm6 calibration remains off by default. To enable it, use the spike-in
+   example sheet, configure INDEX_*_DM6/CHROM_SIZES_DM6/BLACKLIST_DM6 and set
+   GENERATE_DROSOPHILA_SPIKEIN_STRINGENT_TRACKS=true.
+10. Run the main entry point with:
 
    bash /path/to/ATACseq2tracks/atacseq2tracks.sh \
         --config /path/to/project/config/config.conf

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ATACseq2tracks v4.0.0 - pre-flight validation
+# ATACseq2tracks v4.2.0 - pre-flight validation
 set -euo pipefail
 
 SAMPLESHEET_ARG="${1:?ERROR: pass samplesheet.csv as argument 1}"
@@ -27,6 +27,8 @@ for setting_value in \
     "QC_SAMPLE_PARALLEL_JOBS=${QC_SAMPLE_PARALLEL_JOBS:-4}" \
     "ATAQV_PARALLEL_JOBS=${ATAQV_PARALLEL_JOBS:-4}" \
     "TRACK_PARALLEL_JOBS=${TRACK_PARALLEL_JOBS:-2}" \
+    "COVERAGE_FILTER_PARALLEL_JOBS=${COVERAGE_FILTER_PARALLEL_JOBS:-2}" \
+    "SPIKEIN_PARALLEL_JOBS=${SPIKEIN_PARALLEL_JOBS:-2}" \
     "POOLED_MACS_PARALLEL_JOBS=${POOLED_MACS_PARALLEL_JOBS:-2}" \
     "MERGE_PARALLEL_JOBS=${MERGE_PARALLEL_JOBS:-2}"; do
     setting_name="${setting_value%%=*}"
@@ -46,6 +48,88 @@ case "${ENABLE_AUTOMATIC_CLEANUP:-true}" in
     false) ok "automatic cleanup disabled; all intermediates will be retained" ;;
     *) fail "ENABLE_AUTOMATIC_CLEANUP must be true or false" ;;
 esac
+for setting_name in GENERATE_CPM_TRACKS GENERATE_DESEQ2_CONSENSUS_TRACKS \
+    GENERATE_DESEQ2_ROBUST_CPM_PERMISSIVE_TRACKS \
+    GENERATE_DESEQ2_ROBUST_CPM_INTERMEDIATE_TRACKS \
+    GENERATE_DESEQ2_ROBUST_CPM_STRINGENT_TRACKS \
+    GENERATE_DROSOPHILA_SPIKEIN_STRINGENT_TRACKS \
+    GENERATE_COVERAGE_BIGWIGS GENERATE_COVERAGE_BEDGRAPHS \
+    KEEP_NORMALIZATION_POLICY_BAMS KEEP_SPIKEIN_BAMS; do
+    setting_value="${!setting_name:-}"
+    [[ -n "$setting_value" ]] || {
+        case "$setting_name" in
+            KEEP_NORMALIZATION_POLICY_BAMS|KEEP_SPIKEIN_BAMS|GENERATE_DROSOPHILA_SPIKEIN_STRINGENT_TRACKS) setting_value=false ;;
+            *) setting_value=true ;;
+        esac
+    }
+    case "$setting_value" in
+        true|false) ok "$setting_name: $setting_value" ;;
+        *) fail "$setting_name must be true or false" ;;
+    esac
+done
+if [[ "${GENERATE_COVERAGE_BIGWIGS:-true}" != "true" && \
+      "${GENERATE_COVERAGE_BEDGRAPHS:-true}" != "true" ]] && \
+   [[ "${GENERATE_CPM_TRACKS:-true}" == "true" || \
+      "${GENERATE_DESEQ2_CONSENSUS_TRACKS:-true}" == "true" || \
+      "${GENERATE_DESEQ2_ROBUST_CPM_PERMISSIVE_TRACKS:-true}" == "true" || \
+      "${GENERATE_DESEQ2_ROBUST_CPM_INTERMEDIATE_TRACKS:-true}" == "true" || \
+      "${GENERATE_DESEQ2_ROBUST_CPM_STRINGENT_TRACKS:-true}" == "true" || \
+      "${GENERATE_DROSOPHILA_SPIKEIN_STRINGENT_TRACKS:-false}" == "true" ]]; then
+    fail "at least one coverage format must be enabled when a coverage family is enabled"
+fi
+for setting_name in PERMISSIVE_MIN_MAPQ INTERMEDIATE_MIN_MAPQ; do
+    setting_value="${!setting_name:-0}"
+    [[ "$setting_value" =~ ^[0-9]+$ ]] \
+        && ok "$setting_name: $setting_value" \
+        || fail "$setting_name must be a non-negative integer"
+done
+for setting_name in SPIKEIN_MIN_MAPQ SPIKEIN_MIN_FRAGMENTS_FAIL SPIKEIN_MIN_FRAGMENTS_WARN; do
+    setting_value="${!setting_name:-}"
+    [[ -n "$setting_value" ]] || {
+        case "$setting_name" in
+            SPIKEIN_MIN_MAPQ) setting_value=30 ;;
+            SPIKEIN_MIN_FRAGMENTS_FAIL) setting_value=1000 ;;
+            *) setting_value=10000 ;;
+        esac
+    }
+    [[ "$setting_value" =~ ^[0-9]+$ ]] \
+        && ok "$setting_name: $setting_value" \
+        || fail "$setting_name must be a non-negative integer"
+done
+if (( ${SPIKEIN_MIN_FRAGMENTS_WARN:-10000} < ${SPIKEIN_MIN_FRAGMENTS_FAIL:-1000} )); then
+    fail "SPIKEIN_MIN_FRAGMENTS_WARN must be >= SPIKEIN_MIN_FRAGMENTS_FAIL"
+else
+    ok "Drosophila spike-in count thresholds"
+fi
+if awk -v value="${SPIKEIN_SCALE_TARGET:-1000000}" \
+    'BEGIN{exit !(value ~ /^([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][-+]?[0-9]+)?$/ && value > 0)}'; then
+    ok "SPIKEIN_SCALE_TARGET: ${SPIKEIN_SCALE_TARGET:-1000000}"
+else
+    fail "SPIKEIN_SCALE_TARGET must be a positive number"
+fi
+for setting_name in SPIKEIN_WARN_LOW_FRACTION SPIKEIN_WARN_HIGH_FRACTION; do
+    setting_value="${!setting_name:-}"
+    [[ -n "$setting_value" ]] || {
+        [[ "$setting_name" == SPIKEIN_WARN_LOW_FRACTION ]] && setting_value=0.001 || setting_value=0.20
+    }
+    if awk -v value="$setting_value" \
+        'BEGIN{exit !(value ~ /^([0-9]+([.][0-9]*)?|[.][0-9]+)$/ && value >= 0 && value <= 1)}'; then
+        ok "$setting_name: $setting_value"
+    else
+        fail "$setting_name must be between zero and one"
+    fi
+done
+if awk -v low="${SPIKEIN_WARN_LOW_FRACTION:-0.001}" -v high="${SPIKEIN_WARN_HIGH_FRACTION:-0.20}" \
+    'BEGIN{exit !(low < high)}'; then
+    ok "Drosophila spike-in fraction thresholds"
+else
+    fail "SPIKEIN_WARN_LOW_FRACTION must be lower than SPIKEIN_WARN_HIGH_FRACTION"
+fi
+if [[ "${SPIKEIN_CANONICAL_CONTIGS:-2L,2R,3L,3R,4,X}" =~ ^[A-Za-z0-9_,]+$ ]]; then
+    ok "SPIKEIN_CANONICAL_CONTIGS: ${SPIKEIN_CANONICAL_CONTIGS:-2L,2R,3L,3R,4,X}"
+else
+    fail "SPIKEIN_CANONICAL_CONTIGS contains unsupported characters"
+fi
 SAMPLESHEET="$SAMPLESHEET_ARG"
 [[ -f "$SAMPLESHEET" ]] || { echo "ERROR: samplesheet not found: $SAMPLESHEET" >&2; exit 1; }
 python3 "$INPUT_SANITIZER" "$SAMPLESHEET"
@@ -54,11 +138,14 @@ VERSION="$(tr -d '[:space:]' < "$VERSION_FILE" 2>/dev/null || echo unknown)"
 
 echo "ATACseq2tracks ${VERSION} pre-flight"
 
-for script in validate_samplesheet.py sanitize_text_inputs.py fastqc_batch.sh trimgalore_batch.sh \
+for script in validate_samplesheet.py sanitize_text_inputs.py extract_spikein_samples.py fastqc_batch.sh trimgalore_batch.sh \
     bowtie2_batch.sh picard_dedup_batch.sh blacklist_filter.sh \
-    blacklist_filter_batch.sh genomecoverage_single.sh genomecoverage_batch.sh merge_replicates.sh \
+    blacklist_filter_batch.sh filter_bam_for_coverage_policy.sh \
+    genomecoverage_single.sh genomecoverage_batch.sh merge_replicates.sh \
     macs2_peaks.sh macs2_batch.sh post_alignment_qc_batch.sh \
     consensus_peak_size_factors.R qc_table_helpers.sh track_normalization_helpers.sh parallel_job_helpers.sh \
+    generate_filtering_sensitivity_tracks.sh \
+    filter_composite_spikein_bam.sh drosophila_spikein_tracks.sh \
     create_ucsc_tracks.sh ataqv_qc_batch.sh \
     prepare_tss_bed.py extract_ataqv_metrics.py plot_fragment_periodicity.py \
     plot_chrom_coverage.py peak_interpretation.sh prepare_diffbind.R \
@@ -93,6 +180,13 @@ fi
 
 if [[ -f "$SAMPLESHEET" ]]; then
     python3 "${SCRIPT_DIR}/validate_samplesheet.py" "$SAMPLESHEET" && ok "samplesheet schema" || fail "samplesheet validation"
+    if [[ "${GENERATE_DROSOPHILA_SPIKEIN_STRINGENT_TRACKS:-false}" == "true" ]]; then
+        if python3 "${SCRIPT_DIR}/extract_spikein_samples.py" "$SAMPLESHEET" >/dev/null; then
+            ok "dm6 spike-in declarations"
+        else
+            fail "invalid or absent dm6 spike-in declarations"
+        fi
+    fi
 
     mapfile -t USED_GENOMES < <(python3 - "$SAMPLESHEET" <<'PY'
 import csv, sys
@@ -101,7 +195,7 @@ with open(sys.argv[1], newline="") as handle:
 PY
     )
     if (( ${#USED_GENOMES[@]} > 1 )); then
-        fail "multiple genome builds in one run (${USED_GENOMES[*]}); v4.0.0 requires one build per run"
+        fail "multiple genome builds in one run (${USED_GENOMES[*]}); v4.2.0 requires one build per run"
     elif (( ${#USED_GENOMES[@]} == 1 )); then
         ok "single genome build: ${USED_GENOMES[0]}"
     fi
@@ -115,7 +209,10 @@ with open(sys.argv[1], newline="") as handle:
 print(len(keys))
 PY
     )"
-    if [[ "${GENERATE_DESEQ2_CONSENSUS_TRACKS:-true}" == "true" ]] && \
+    if [[ "${GENERATE_DESEQ2_CONSENSUS_TRACKS:-true}" == "true" || \
+          "${GENERATE_DESEQ2_ROBUST_CPM_PERMISSIVE_TRACKS:-true}" == "true" || \
+          "${GENERATE_DESEQ2_ROBUST_CPM_INTERMEDIATE_TRACKS:-true}" == "true" || \
+          "${GENERATE_DESEQ2_ROBUST_CPM_STRINGENT_TRACKS:-true}" == "true" ]] && \
        (( BIOLOGICAL_SAMPLE_COUNT < ${CONSENSUS_MIN_SAMPLES:-2} )); then
         fail "DESeq2 consensus tracks require at least ${CONSENSUS_MIN_SAMPLES:-2} biological samples; found $BIOLOGICAL_SAMPLE_COUNT"
     else
@@ -240,7 +337,7 @@ SE_MODE="${SE_SIGNAL_MODE:-read}"
 if [[ "${SE_MODE,,}" == "read" ]]; then
     ok "single-end signal mode: read"
 else
-    fail "unsupported SE_SIGNAL_MODE=${SE_MODE}; v4.0.0 supports read only"
+    fail "unsupported SE_SIGNAL_MODE=${SE_MODE}; v4.2.0 supports read only"
 fi
 
 if [[ "${TRACK_STANDARD_CHROMS_ONLY:-true}" == "true" ]]; then
@@ -251,7 +348,7 @@ fi
 
 MACS3_COMMAND="${MACS3_COMMAND:-macs3}"
 for tool in bowtie2 samtools bedtools trim_galore fastqc "$MACS3_COMMAND" \
-    multiqc python3 "${R_BIN:-Rscript}" bamCoverage multiBamSummary gzip; do
+    multiqc python3 "${R_BIN:-Rscript}" bamCoverage multiBamSummary gzip java sha256sum; do
     command -v "$tool" >/dev/null 2>&1 && ok "tool: $tool" || fail "tool not in PATH: $tool"
 done
 
@@ -270,6 +367,20 @@ fi
 check_reference() {
     local label="$1" path="$2"
     [[ -f "$path" ]] && ok "$label: $path" || fail "$label not found: $path"
+}
+
+check_complete_bowtie2_index() {
+    local label="$1" prefix="$2" extension component missing
+    for extension in bt2 bt2l; do
+        missing=0
+        for component in 1 2 3 4; do [[ -s "${prefix}.${component}.${extension}" ]] || missing=$((missing + 1)); done
+        for component in 1 2; do [[ -s "${prefix}.rev.${component}.${extension}" ]] || missing=$((missing + 1)); done
+        if (( missing == 0 )); then
+            ok "$label: $prefix"
+            return
+        fi
+    done
+    fail "$label is incomplete or missing: $prefix"
 }
 
 check_ccre_reference() {
@@ -332,6 +443,7 @@ for genome in "${USED_GENOMES[@]:-}"; do
                 fi
             fi
             index="${INDEX_HG38:-}"
+            composite_index="${INDEX_HG38_DM6:-}"
             ;;
         mm39)
             check_reference CHROM_SIZES_MOUSE "${CHROM_SIZES_MOUSE:-}"
@@ -353,6 +465,7 @@ for genome in "${USED_GENOMES[@]:-}"; do
                 fi
             fi
             index="${INDEX_MM39:-}"
+            composite_index="${INDEX_MM39_DM6:-}"
             ;;
         "") continue ;;
         *) fail "unsupported genome: $genome"; continue ;;
@@ -361,6 +474,11 @@ for genome in "${USED_GENOMES[@]:-}"; do
         ok "Bowtie2 index: $index"
     else
         fail "Bowtie2 index not found: $index"
+    fi
+    if [[ "${GENERATE_DROSOPHILA_SPIKEIN_STRINGENT_TRACKS:-false}" == "true" ]]; then
+        check_reference CHROM_SIZES_DM6 "${CHROM_SIZES_DM6:-}"
+        check_reference BLACKLIST_DM6 "${BLACKLIST_DM6:-}"
+        check_complete_bowtie2_index "Composite ${genome}+dm6 Bowtie2 index" "$composite_index"
     fi
 done
 

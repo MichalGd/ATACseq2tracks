@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# ATACseq2tracks v4.0.0
+# ATACseq2tracks v4.2.0
 # ATAC-seq / chromatin profiling track-generation and QC workflow
 #
 # Usage:
@@ -18,7 +18,7 @@ INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_DIR="${INSTALL_DIR}/scripts"
 INPUT_SANITIZER="${SCRIPT_DIR}/sanitize_text_inputs.py"
 F2T_CONFIG=""
-PIPELINE_VERSION="$(tr -d '[:space:]' < "${INSTALL_DIR}/VERSION" 2>/dev/null || echo 4.0.0)"
+PIPELINE_VERSION="$(tr -d '[:space:]' < "${INSTALL_DIR}/VERSION" 2>/dev/null || echo 4.2.0)"
 
 usage() {
     echo "Usage: bash atacseq2tracks.sh --config /absolute/path/to/config.conf"
@@ -93,6 +93,18 @@ mkdir -p \
     "${OUTPUT_DIR}/bigwig" \
     "${OUTPUT_DIR}/bigwig_deseq2_consensus" \
     "${OUTPUT_DIR}/bigwig_deseq2_robust_cpm" \
+    "${OUTPUT_DIR}/bigwig_deseq2_robust_cpm/permissive" \
+    "${OUTPUT_DIR}/bigwig_deseq2_robust_cpm/intermediate" \
+    "${OUTPUT_DIR}/bigwig_deseq2_robust_cpm/stringent" \
+    "${OUTPUT_DIR}/coverage_filtering_sensitivity" \
+    "${OUTPUT_DIR}/coverage_filtering_policy_bams" \
+    "${OUTPUT_DIR}/bigwig_spikein/stringent" \
+    "${OUTPUT_DIR}/spikein/composite_bams" \
+    "${OUTPUT_DIR}/spikein/dedup_bams" \
+    "${OUTPUT_DIR}/spikein/stringent_host_bams" \
+    "${OUTPUT_DIR}/spikein/stringent_dm6_bams" \
+    "${OUTPUT_DIR}/spikein/logs" \
+    "${OUTPUT_DIR}/spikein/tables" \
     "${OUTPUT_DIR}/bigwig_merged" \
     "${OUTPUT_DIR}/peaks/per_replicate" \
     "${OUTPUT_DIR}/peaks/pooled" \
@@ -167,22 +179,43 @@ if is_done 6; then skip_msg 6; else
     mark_done 6
 fi
 
+# Step 6s is independent of the existing host-only branches. It uses a
+# competitive host+dm6 composite alignment and creates only spike-in tracks.
+if [[ "${GENERATE_DROSOPHILA_SPIKEIN_STRINGENT_TRACKS:-false}" == "true" ]]; then
+    if is_done 6s; then skip_msg 6s; else
+        echo "=== [6s] Drosophila spike-in stringent coverage ==="
+        bash "${SCRIPT_DIR}/drosophila_spikein_tracks.sh" \
+            "$SAMPLESHEET" "${OUTPUT_DIR}/trimmedFastq" "$OUTPUT_DIR"
+        mark_done 6s
+    fi
+else
+    echo "=== [6s] Drosophila spike-in coverage disabled ==="
+fi
+
 # ── Step 7: Genome coverage ───────────────────────────────────────────────────
 if is_done 7; then skip_msg 7; else
-    echo "=== [7] Fragment/read CPM coverage (individual) ==="
-    bash "${SCRIPT_DIR}/genomecoverage_batch.sh" \
-        "$SAMPLESHEET" "${OUTPUT_DIR}/filteredBams" "${OUTPUT_DIR}/bigwig"
+    if [[ "${GENERATE_CPM_TRACKS:-true}" == "true" ]]; then
+        echo "=== [7] Fragment/read CPM coverage (individual) ==="
+        bash "${SCRIPT_DIR}/genomecoverage_batch.sh" \
+            "$SAMPLESHEET" "${OUTPUT_DIR}/filteredBams" "${OUTPUT_DIR}/bigwig"
+    else
+        echo "=== [7] CPM coverage disabled by GENERATE_CPM_TRACKS=false ==="
+    fi
     mark_done 7
 fi
 
 # ── Step 8: Replicate merging ─────────────────────────────────────────────────
 if is_done 8; then skip_msg 8; else
-    echo "=== [8] Replicate merging + merged CPM tracks ==="
-    for GENOME in hg38 mm39; do
-        grep -q ",$GENOME," "$SAMPLESHEET" && \
-            bash "${SCRIPT_DIR}/merge_replicates.sh" \
-                "$SAMPLESHEET" "${OUTPUT_DIR}/filteredBams" "${OUTPUT_DIR}/bigwig_merged" "$GENOME"
-    done
+    if [[ "${GENERATE_CPM_TRACKS:-true}" == "true" ]]; then
+        echo "=== [8] Replicate merging + merged CPM tracks ==="
+        for GENOME in hg38 mm39; do
+            grep -q ",$GENOME," "$SAMPLESHEET" && \
+                bash "${SCRIPT_DIR}/merge_replicates.sh" \
+                    "$SAMPLESHEET" "${OUTPUT_DIR}/filteredBams" "${OUTPUT_DIR}/bigwig_merged" "$GENOME"
+        done
+    else
+        echo "=== [8] Merged CPM coverage disabled with CPM tracks ==="
+    fi
     mark_done 8
 fi
 
@@ -218,6 +251,22 @@ if is_done 10; then skip_msg 10; else
     mark_done 10
 fi
 # ── Step 11: DiffBind prep ────────────────────────────────────────────────────
+# Step 10b: additional robust-CPM policies use the fixed Step 10 consensus universe.
+# Their own count matrices and DESeq2 factors isolate duplicate and MAPQ effects.
+if [[ "${GENERATE_DESEQ2_ROBUST_CPM_PERMISSIVE_TRACKS:-true}" == "true" || \
+      "${GENERATE_DESEQ2_ROBUST_CPM_INTERMEDIATE_TRACKS:-true}" == "true" ]]; then
+    if is_done 10b; then skip_msg 10b; else
+        echo "=== [10b] Read-filtering sensitivity robust-CPM tracks ==="
+        bash "${SCRIPT_DIR}/generate_filtering_sensitivity_tracks.sh" \
+            "$SAMPLESHEET" "$OUTPUT_DIR" \
+            "${OUTPUT_DIR}/qc_post_alignment/peak_sets/consensus_peaks.bed"
+        mark_done 10b
+    fi
+else
+    echo "=== [10b] Permissive/intermediate robust-CPM tracks disabled ==="
+fi
+
+# Step 11: DiffBind samplesheet preparation
 if is_done 11; then skip_msg 11; else
     echo "=== [11] DiffBind samplesheet preparation ==="
     for GENOME in hg38 mm39; do
@@ -268,8 +317,10 @@ fi
 # ── Step 13: UCSC tracks ──────────────────────────────────────────────────────
 if is_done 13; then skip_msg 13; else
     echo "=== [13] UCSC tracks ==="
-    bash "${SCRIPT_DIR}/create_ucsc_tracks.sh" \
-        "${OUTPUT_DIR}/bigwig" "${UCSC_BIGDATA_URL_BASE:-}" "${UCSC_TRACK_PREFIX:-ATAC-seq} CPM"
+    if find "${OUTPUT_DIR}/bigwig" -maxdepth 1 -name '*.bw' -print -quit | grep -q .; then
+        bash "${SCRIPT_DIR}/create_ucsc_tracks.sh" \
+            "${OUTPUT_DIR}/bigwig" "${UCSC_BIGDATA_URL_BASE:-}" "${UCSC_TRACK_PREFIX:-ATAC-seq} CPM"
+    fi
     if find "${OUTPUT_DIR}/bigwig_deseq2_consensus" -maxdepth 1 -name '*.bw' -print -quit | grep -q .; then
         DESEQ2_URL="${UCSC_BIGDATA_URL_BASE:+${UCSC_BIGDATA_URL_BASE%/}/deseq2_consensus}"
         bash "${SCRIPT_DIR}/create_ucsc_tracks.sh" \
@@ -279,6 +330,20 @@ if is_done 13; then skip_msg 13; else
         ROBUST_URL="${UCSC_BIGDATA_URL_BASE:+${UCSC_BIGDATA_URL_BASE%/}/deseq2_robust_cpm}"
         bash "${SCRIPT_DIR}/create_ucsc_tracks.sh" \
             "${OUTPUT_DIR}/bigwig_deseq2_robust_cpm" "$ROBUST_URL" "${UCSC_TRACK_PREFIX:-ATAC-seq} DESeq2 robust CPM"
+    fi
+    for POLICY in permissive intermediate stringent; do
+        POLICY_DIR="${OUTPUT_DIR}/bigwig_deseq2_robust_cpm/${POLICY}"
+        if find "$POLICY_DIR" -maxdepth 1 -name '*.bw' -print -quit | grep -q .; then
+            POLICY_URL="${UCSC_BIGDATA_URL_BASE:+${UCSC_BIGDATA_URL_BASE%/}/deseq2_robust_cpm/${POLICY}}"
+            bash "${SCRIPT_DIR}/create_ucsc_tracks.sh" "$POLICY_DIR" "$POLICY_URL" \
+                "${UCSC_TRACK_PREFIX:-ATAC-seq} DESeq2 robust CPM ${POLICY}"
+        fi
+    done
+    if find "${OUTPUT_DIR}/bigwig_spikein/stringent" -maxdepth 1 -name '*.bw' -print -quit | grep -q .; then
+        SPIKEIN_URL="${UCSC_BIGDATA_URL_BASE:+${UCSC_BIGDATA_URL_BASE%/}/spikein/stringent}"
+        bash "${SCRIPT_DIR}/create_ucsc_tracks.sh" \
+            "${OUTPUT_DIR}/bigwig_spikein/stringent" "$SPIKEIN_URL" \
+            "${UCSC_TRACK_PREFIX:-ATAC-seq} dm6 spike-in stringent"
     fi
     if find "${OUTPUT_DIR}/bigwig_merged" -maxdepth 1 -name '*.bw' -print -quit | grep -q .; then
         MERGED_URL="${UCSC_BIGDATA_URL_BASE:+${UCSC_BIGDATA_URL_BASE%/}/merged}"
@@ -316,6 +381,12 @@ if [[ "${ENABLE_AUTOMATIC_CLEANUP:-true}" == "true" ]]; then
     rm -f "${OUTPUT_DIR}/dedupBams/"*.bam "${OUTPUT_DIR}/dedupBams/"*.bai 2>/dev/null || true
 [[ "${KEEP_FILTERED_BAMS:-true}" == "false" ]] && \
     rm -f "${OUTPUT_DIR}/filteredBams/"*.bam "${OUTPUT_DIR}/filteredBams/"*.bai 2>/dev/null || true
+[[ "${KEEP_NORMALIZATION_POLICY_BAMS:-false}" == "false" ]] && \
+    find "${OUTPUT_DIR}/coverage_filtering_policy_bams" -type f \
+        \( -name '*.bam' -o -name '*.bai' \) -delete 2>/dev/null || true
+[[ "${KEEP_SPIKEIN_BAMS:-false}" == "false" ]] && \
+    find "${OUTPUT_DIR}/spikein" -type f \
+        \( -name '*.bam' -o -name '*.bai' \) -delete 2>/dev/null || true
 [[ "${KEEP_RAW_BEDGRAPH:-false}" == "false" ]] && \
     rm -f "${OUTPUT_DIR}/bedGraph/"*.bedGraph.gz 2>/dev/null || true
 fi
@@ -323,10 +394,13 @@ fi
 echo ""
 echo "=== ATACseq2tracks v${PIPELINE_VERSION} complete ==="
 echo "  Checkpoints   : ${CHECKPOINT_DIR}/"
-echo "  BigWig CPM           : ${OUTPUT_DIR}/bigwig/"
+echo "  CPM coverage         : ${OUTPUT_DIR}/bigwig/"
 echo "  DESeq2 tracks        : ${OUTPUT_DIR}/bigwig_deseq2_consensus/"
 echo "  DESeq2 robust CPM    : ${OUTPUT_DIR}/bigwig_deseq2_robust_cpm/"
-echo "  BigWig merged : ${OUTPUT_DIR}/bigwig_merged/"
+echo "  Filtering sensitivity: ${OUTPUT_DIR}/coverage_filtering_sensitivity/"
+echo "  dm6 spike-in tracks  : ${OUTPUT_DIR}/bigwig_spikein/stringent/"
+echo "  dm6 spike-in QC      : ${OUTPUT_DIR}/spikein/tables/"
+echo "  Merged CPM    : ${OUTPUT_DIR}/bigwig_merged/"
 echo "  Peaks narrow  : ${OUTPUT_DIR}/peaks/per_replicate/<sample>/narrow/"
 echo "  Peaks broad   : ${OUTPUT_DIR}/peaks/per_replicate/<sample>/broad/"
 echo "  QC deepTools     : ${OUTPUT_DIR}/qc_post_alignment/"

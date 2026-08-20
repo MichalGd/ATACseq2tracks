@@ -1,5 +1,42 @@
 # Changelog
 
+## v4.2.0 - 2026-08-20
+
+- Add an opt-in dm6 spike-in coverage family without altering the five v4.1.0
+  coverage families or differential analyses.
+- Competitively align trimmed reads to hg38+dm6 or mm39+dm6, deduplicate the
+  composite BAM and apply stringent primary/canonical/MAPQ/blacklist filtering.
+- Scale raw stringent host coverage by
+  `SPIKEIN_SCALE_TARGET × spikein_to_host_ratio / retained_dm6_count`; do not
+  layer the external reference on DESeq2 robust-CPM.
+- Support PE fragment and SE read semantics in separate runs.
+- Add optional samplesheet declarations, composite/dm6 reference validation,
+  low-count/fraction warnings, provenance, checksums, checkpoint `6s`, bounded
+  parallelism and success-only BAM cleanup.
+- Add a shared-reference preparation utility, mocked regression test and safe
+  immutable all-user deployment guide.
+
+## v4.1.0 - 2026-08-20
+
+- Generate CPM, DESeq2Consensus and permissive/intermediate/stringent
+  DESeq2-robust-CPM bigWig and bedGraph families by default.
+- Add independent family and global format switches while preserving legacy
+  configuration compatibility.
+- Use pre-dedup MAPQ 0 primary alignments for permissive sensitivity tracks,
+  Picard-deduplicated MAPQ 0 primary alignments for intermediate tracks, and
+  the existing deduplicated `MIN_MAPQ=30` BAM for stringent tracks.
+- Apply identical canonical-chromosome, blacklist, PE-fragment and SE-read
+  definitions to every filtering policy.
+- Reuse one fixed production consensus BED while estimating a separate count
+  matrix, DESeq2 size-factor vector and robust cohort constant per policy.
+- Record MAPQ bins, `XS` alternative-alignment tags, retained observations,
+  filtering semantics, consensus checksum and normalization factors.
+- Add independently checkpointed Step 10b and success-only cleanup of temporary
+  policy BAMs.
+- Retain the original `*_DESeq2RobustCPM` stringent files as compatibility
+  copies and leave peak calling, QC, annotation and differential analysis
+  unchanged.
+
 ## v4.0.0 - 2026-08-19
 
 ### Reporting and DiffBind hotfix - 2026-08-20

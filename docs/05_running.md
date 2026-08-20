@@ -94,6 +94,15 @@ To rerun multiple steps:
 rm /path/to/my_project/analysis/.checkpoints/step{6,7,8,9,10,11}.done
 ```
 
+To rerun only permissive/intermediate filtering and robust-CPM tracks:
+
+```bash
+rm /path/to/my_project/analysis/.checkpoints/step10b.done
+```
+
+This requires the pre-dedup `bams/` and/or `dedupBams/` inputs. They cannot be
+reconstructed after a completed run has removed them through automatic cleanup.
+
 DiffBind and DESeq2ATAC resume independently:
 
 ```bash

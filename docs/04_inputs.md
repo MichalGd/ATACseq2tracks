@@ -36,6 +36,16 @@ which genome to use, how to pair IPs with controls, and what type of peaks to ca
 | 16 | `blacklist` | path | ✓ | Absolute path to the blacklist BED file for this genome. |
 | 17 | `output_prefix` | string | ✓ | Prefix for output files. Typically same as `sample_id`. |
 
+For the optional v4.2.0 dm6 calibration branch, add all three columns below.
+Partial declarations are rejected; legacy sheets remain valid when the branch
+is disabled.
+
+| Column | Required in spike-in mode | Description |
+|---|---|---|
+| `spikein_genome` | yes | `dm6` |
+| `spikein_to_host_ratio` | yes | Positive relative dm6:host amount added on the same basis for every sample; use `1` when equal |
+| `spikein_stage` | yes | `pre_tagmentation_nuclei` |
+
 ### Rules and conventions
 
 **Controls**
@@ -60,6 +70,14 @@ which genome to use, how to pair IPs with controls, and what type of peaks to ca
 - PE normalization counts properly paired fragments once.
 - SE normalization uses one filtered alignment per observation with `SE_SIGNAL_MODE="read"`; leave `fastq_2` empty.
 - Use separate output directories because PE fragment signal and SE read signal are different units.
+
+**Drosophila spike-in**
+- Add dm6 nuclei/cells before tagmentation; a post-library mixture cannot
+  calibrate upstream technical losses.
+- Technical-replicate rows for one biological key must use identical spike-in
+  metadata.
+- Use `config/samplesheet_example_atac_spikein.csv` and enable
+  `GENERATE_DROSOPHILA_SPIKEIN_STRINGENT_TRACKS=true`.
 
 **Batch metadata (optional)**
 - You may add an optional `batch` column to the samplesheet.
@@ -129,6 +147,8 @@ Copy the template and edit for your server.
 |---|---|
 | `INDEX_HG38` | Bowtie2 index prefix for hg38 |
 | `INDEX_MM39` | Bowtie2 index prefix for mm39 |
+| `INDEX_HG38_DM6` | Bowtie2 composite index prefix for competitively aligned hg38+dm6 reads |
+| `INDEX_MM39_DM6` | Bowtie2 composite index prefix for competitively aligned mm39+dm6 reads |
 | `CHROM_SIZES_HUMAN` | hg38 chromosome sizes file |
 | `CHROM_SIZES_MOUSE` | mm39 chromosome sizes file |
 | `GTF_HUMAN` | hg38 GTF used to derive a TSS BED when none is supplied |
@@ -139,6 +159,8 @@ Copy the template and edit for your server.
 | `CCRE_BED_MM39` | mm39 cCRE BED; required for an mm39 run when cCRE annotation is enabled |
 | `CCRE_SOURCE_HG38` | Provenance label copied into hg38 annotation tables |
 | `CCRE_SOURCE_MM39` | Provenance label copied into mm39 annotation tables |
+| `CHROM_SIZES_DM6` | dm6 chromosome sizes used to validate the declared reference |
+| `BLACKLIST_DM6` | dm6 blacklist BED applied before the external-reference denominator is counted |
 
 See [Peak annotation](16_peak_annotation.md) for the exact GTF category rules,
 cCRE class meanings, expected reference construction and output columns.
@@ -165,6 +187,7 @@ cCRE class meanings, expected reference construction and output columns.
 | `THREADS_PARALLEL_JOBS` | Max samples in parallel | 8 |
 | `QC_SAMPLE_PARALLEL_JOBS` | Concurrent post-alignment metric, karyogram and consensus-FRiP samples | 4 |
 | `ATAQV_PARALLEL_JOBS` | Concurrent ataqv/periodicity samples | 4 |
+| `SPIKEIN_PARALLEL_JOBS` | Concurrent competitive alignment/calibration samples | 2 |
 | `TRACK_PARALLEL_JOBS` | Concurrent DESeq2 track-generation samples | 2 |
 | `POOLED_MACS_PARALLEL_JOBS` | Concurrent pooled MACS3 groups | 2 |
 | `MERGE_PARALLEL_JOBS` | Concurrent replicate-merge/CPM groups | 2 |
@@ -194,6 +217,8 @@ values further.
 | `KEEP_TRIMMED_FASTQ` | Keep trimmed FASTQs in `trimmedFastq/` | `false` |
 | `KEEP_DEDUP_BAMS` | Keep pre-blacklist deduplicated BAMs | `false` |
 | `KEEP_FILTERED_BAMS` | Keep quantitative analysis BAMs | `true` |
+| `KEEP_NORMALIZATION_POLICY_BAMS` | Keep temporary permissive/intermediate BAMs after full success | `false` |
+| `KEEP_SPIKEIN_BAMS` | Keep composite, deduplicated and host/dm6 split spike-in BAMs after full success | `false` |
 | `KEEP_RAW_BEDGRAPH` | Keep raw coverage bedGraphs in `bedGraph/` | `false` |
 
 #### Consensus, tracks and ATAC QC
@@ -203,6 +228,23 @@ values further.
 | `CONSENSUS_MIN_SAMPLES` | Distinct biological samples required to support a consensus interval | `2` |
 | `ALLOW_SINGLE_SAMPLE_CONSENSUS` | Permit a one-sample fallback | `false` |
 | `GENERATE_DESEQ2_CONSENSUS_TRACKS` | Generate consensus-count DESeq2-scaled tracks | `true` |
+| `GENERATE_CPM_TRACKS` | Generate current-policy CPM coverage | `true` |
+| `GENERATE_DESEQ2_ROBUST_CPM_PERMISSIVE_TRACKS` | Generate robust-CPM tracks from pre-dedup primary alignments at `PERMISSIVE_MIN_MAPQ` | `true` |
+| `GENERATE_DESEQ2_ROBUST_CPM_INTERMEDIATE_TRACKS` | Generate robust-CPM tracks from Picard-deduplicated primary alignments at `INTERMEDIATE_MIN_MAPQ` | `true` |
+| `GENERATE_DESEQ2_ROBUST_CPM_STRINGENT_TRACKS` | Generate robust-CPM tracks from the current deduplicated `MIN_MAPQ` final BAM | `true` |
+| `GENERATE_COVERAGE_BIGWIGS` | Generate bigWig format for every enabled family | `true` |
+| `GENERATE_COVERAGE_BEDGRAPHS` | Generate bedGraph format for every enabled family | `true` |
+| `PERMISSIVE_MIN_MAPQ` | MAPQ threshold for duplicates-retained sensitivity BAMs | `0` |
+| `INTERMEDIATE_MIN_MAPQ` | MAPQ threshold for deduplicated sensitivity BAMs | `0` |
+| `GENERATE_DROSOPHILA_SPIKEIN_STRINGENT_TRACKS` | Run independent stringent dm6 calibration; requires samplesheet declarations | `false` |
+| `SPIKEIN_MIN_MAPQ` | Minimum composite-alignment MAPQ for both host and dm6 | `30` |
+| `SPIKEIN_SCALE_TARGET` | Fixed retained-dm6 target in the scale formula | `1000000` |
+| `SPIKEIN_CANONICAL_CONTIGS` | Comma-separated dm6 chromosomes included in counts | `2L,2R,3L,3R,4,X` |
+| `SPIKEIN_MIN_FRAGMENTS_FAIL` | Hard minimum retained dm6 fragments/reads | `1000` |
+| `SPIKEIN_MIN_FRAGMENTS_WARN` | Low-count warning threshold | `10000` |
+| `SPIKEIN_WARN_LOW_FRACTION` | Low dm6-fraction warning threshold | `0.001` |
+| `SPIKEIN_WARN_HIGH_FRACTION` | High dm6-fraction warning threshold | `0.20` |
+| `COVERAGE_FILTER_PARALLEL_JOBS` | Concurrent policy-BAM filtering jobs | `2` |
 | `SE_SIGNAL_MODE` | SE normalization unit; currently only one retained `read` is supported | `read` |
 | `RUN_ATAQV_QC` | Run TSS enrichment and ATAC fragment QC | `true` |
 | `GENERATE_ATAQV_VIEWER` | Build the local interactive ataqv viewer | `true` |
@@ -214,6 +256,13 @@ values further.
 | `RUN_CCRE_ANNOTATION` | Require and add genome-matched cCRE classes; set false for GTF-only annotation | `true` |
 | `PEAK_ANNOTATION_PROMOTER_UPSTREAM` | Bases upstream of TSS in promoter definition | `2000` |
 | `PEAK_ANNOTATION_PROMOTER_DOWNSTREAM` | Bases downstream of TSS in promoter definition | `500` |
+
+The three robust policies share the one consensus BED produced in Step 10, but
+each filtering policy receives its own consensus count matrix, DESeq2 size
+factors and robust cohort constant. Setting a family switch to `false` also
+prevents construction of the BAM branch used only by that family. `MAPQ=0`
+branches are exploratory sensitivity outputs; the `MIN_MAPQ=30` stringent/current
+branch remains the principal high-confidence coverage policy.
 
 #### Deprecated variables (v3.0.x → v3.1.0)
 

@@ -1,0 +1,31 @@
+status	path	purpose
+modified	VERSION	Set authoritative runtime release to 4.2.0
+modified	atacseq2tracks.sh	Add checkpointed spike-in stage, UCSC definitions, cleanup and final paths
+modified	fastq2tracks.sh	Keep compatibility entry point byte-identical to the main entry point
+modified	config/config.conf	Add disabled-by-default dm6/composite references, thresholds, parallelism and cleanup
+modified	config/config_temp.conf.template	Mirror the v4.2.0 configuration template
+modified	config/README.txt	Document spike-in setup and example
+added	config/samplesheet_example_atac_spikein.csv	Show the three optional dm6 declaration columns
+modified	scripts/validate_samplesheet.py	Validate optional dm6 genome, ratio and pre-tagmentation stage
+added	scripts/extract_spikein_samples.py	Collapse technical rows and emit declared biological spike-in keys
+added	scripts/filter_composite_spikein_bam.sh	Apply stringent species split, headers, canonical universe and blacklists
+added	scripts/drosophila_spikein_tracks.sh	Align composite reads, deduplicate, count dm6, scale host coverage and write QC
+modified	scripts/track_normalization_helpers.sh	Add validated external-reference scale calculation
+modified	scripts/smoke_test.sh	Validate switches, tools, sample declarations and complete composite references
+modified	scripts/generate_pipeline_report.sh	Require and report spike-in audit tables when enabled
+modified	tests/check_bash_syntax.sh	Run focused v4.2.0 regression checks
+modified	tests/test_v4_1_0_coverage_policies.sh	Assert inherited coverage behavior under runtime version 4.2.0
+added	tests/test_v4_2_0_spikein.sh	Test scale arithmetic, species headers, tracks, metadata and thresholds with mocks
+added	utilities/prepare_dm6_spikein_references.sh	Build shared host+dm6 indices and checksum provenance without changing sources
+modified	README.md	Add flowchart branch, semantics, configuration, outputs, validation and limits
+modified	CHANGELOG.md	Record v4.2.0 changes
+modified	update.md	Set the current release handoff to v4.2.0
+modified	docs/README.md	Index the current update documentation
+modified	docs/01_overview.md	Describe the optional external-reference branch
+modified	docs/04_inputs.md	Document optional sample fields and configuration
+modified	docs/06_pipeline_steps.md	Document checkpointed Step 6s
+modified	docs/07_outputs.md	Document tracks and calibration/QC tables
+modified	docs/10_reference_files.md	Document dm6 and composite reference preparation
+added	docs/v4.2.0_DROSOPHILA_SPIKEIN_UPDATE_2026-08-20.md	Full method, formula, filters, outputs, limits and validation
+added	APPLY_V4.2.0_DROSOPHILA_SPIKEIN_UPDATE_2026-08-20.md	Safe immutable all-user deployment procedure
+added	SHA256SUMS_V4.2.0_2026-08-20.txt	SHA-256 checksums for the complete candidate excluding this checksum file

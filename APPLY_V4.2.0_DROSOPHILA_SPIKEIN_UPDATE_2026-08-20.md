@@ -1,0 +1,109 @@
+# Apply ATACseq2tracks v4.2.0 for all server users
+
+The repository candidate and dm6/composite references are separate deployment
+units. Do not replace `current` until both static tests and shared-reference
+preflight checks pass.
+
+## 1. Prepare shared references
+
+As an administrator, run the bundled reference utility once for hg38 and once
+for mm39. Substitute only real, absolute shared source paths; do not use files
+under a private home directory in the final configuration.
+
+```bash
+sudo bash /absolute/path/to/ATACseq2tracks_v4.2.0/utilities/prepare_dm6_spikein_references.sh \
+  hg38 /opt/bioinformatics/references/hg38/bowtie2/hg38 \
+  /opt/bioinformatics/reference_sources/dm6/dm6.fa.gz \
+  /opt/bioinformatics/reference_sources/dm6/dm6.chrom.sizes \
+  /opt/bioinformatics/reference_sources/dm6/dm6-blacklist.v2.bed \
+  /opt/bioinformatics/references
+
+sudo bash /absolute/path/to/ATACseq2tracks_v4.2.0/utilities/prepare_dm6_spikein_references.sh \
+  mm39 /opt/bioinformatics/references/mm39/bowtie2/mm39 \
+  /opt/bioinformatics/reference_sources/dm6/dm6.fa.gz \
+  /opt/bioinformatics/reference_sources/dm6/dm6.chrom.sizes \
+  /opt/bioinformatics/reference_sources/dm6/dm6-blacklist.v2.bed \
+  /opt/bioinformatics/references
+```
+
+Review `reference_manifest.tsv` under each composite directory.
+
+## 2. Install the immutable workflow version
+
+Assuming the unpacked candidate is
+`/opt/bioinformatics/staging/ATACseq2tracks_v4.2.0`:
+
+```bash
+sudo mkdir -p /opt/bioinformatics/workflows/ATACseq2tracks/4.2.0
+sudo cp -a /opt/bioinformatics/staging/ATACseq2tracks_v4.2.0/. \
+  /opt/bioinformatics/workflows/ATACseq2tracks/4.2.0/
+sudo chown -R root:root /opt/bioinformatics/workflows/ATACseq2tracks/4.2.0
+sudo find /opt/bioinformatics/workflows/ATACseq2tracks/4.2.0 -type d -exec chmod 755 {} +
+sudo find /opt/bioinformatics/workflows/ATACseq2tracks/4.2.0 -type f -exec chmod 644 {} +
+sudo chmod 755 \
+  /opt/bioinformatics/workflows/ATACseq2tracks/4.2.0/atacseq2tracks.sh \
+  /opt/bioinformatics/workflows/ATACseq2tracks/4.2.0/fastq2tracks.sh
+sudo find \
+  /opt/bioinformatics/workflows/ATACseq2tracks/4.2.0/scripts \
+  /opt/bioinformatics/workflows/ATACseq2tracks/4.2.0/tests \
+  /opt/bioinformatics/workflows/ATACseq2tracks/4.2.0/utilities \
+  -type f \( -name '*.sh' -o -name '*.py' -o -name '*.R' \) -exec chmod 755 {} +
+```
+
+## 3. Validate before changing `current`
+
+```bash
+cd /opt/bioinformatics/workflows/ATACseq2tracks/4.2.0
+bash tests/check_bash_syntax.sh
+test "$(cat VERSION)" = "4.2.0"
+test -r /opt/bioinformatics/references/dm6/dm6.chrom.sizes
+test -r /opt/bioinformatics/references/dm6/dm6-blacklist.v2.bed
+for prefix in \
+  /opt/bioinformatics/references/composite/hg38_dm6/bowtie2/hg38_dm6 \
+  /opt/bioinformatics/references/composite/mm39_dm6/bowtie2/mm39_dm6; do
+  bowtie2-inspect -n "$prefix" >/dev/null
+done
+```
+
+Run `scripts/smoke_test.sh` with a user-owned test configuration and spike-in
+samplesheet before biological use. Keep `KEEP_SPIKEIN_BAMS=true` for that first
+small run and inspect the metadata described in the v4.2.0 update note.
+
+## 4. Atomically publish to all users
+
+```bash
+sudo ln -sfn /opt/bioinformatics/workflows/ATACseq2tracks/4.2.0 \
+  /opt/bioinformatics/workflows/ATACseq2tracks/current.new
+sudo mv -Tf /opt/bioinformatics/workflows/ATACseq2tracks/current.new \
+  /opt/bioinformatics/workflows/ATACseq2tracks/current
+readlink -f /opt/bioinformatics/workflows/ATACseq2tracks/current
+cat /opt/bioinformatics/workflows/ATACseq2tracks/current/VERSION
+```
+
+The expected result is an immutable `4.2.0` directory and `current` resolving to
+it. Existing run-owned configs are not edited. Add the four v4.2.0 reference
+paths and spike-in settings only to runs that need dm6 calibration.
+
+## 5. Non-owner validation
+
+From an ordinary user account:
+
+```bash
+test -r /opt/bioinformatics/workflows/ATACseq2tracks/current/VERSION
+test -x /opt/bioinformatics/workflows/ATACseq2tracks/current/atacseq2tracks.sh
+test -x /opt/bioinformatics/workflows/ATACseq2tracks/current/scripts/drosophila_spikein_tracks.sh
+cat /opt/bioinformatics/workflows/ATACseq2tracks/current/VERSION
+```
+
+Then activate the shared environments and run only preflight with absolute paths:
+
+```bash
+source /opt/miniconda/etc/profile.d/conda.sh
+conda activate /opt/miniconda/envs/ATACseq2tracks
+export PATH="$PATH:/opt/miniconda/envs/ataqv-tools/bin"
+bash /opt/bioinformatics/workflows/ATACseq2tracks/current/scripts/smoke_test.sh \
+  /absolute/user-owned/path/samplesheet.csv \
+  /absolute/user-owned/path/config.conf
+```
+
+This command does not launch the complete workflow.
