@@ -121,7 +121,9 @@ PE fragments are counted once; SE reads are counted once.
 Raw stringent host coverage is scaled by
 `SPIKEIN_SCALE_TARGET × spikein_to_host_ratio / retained_dm6_count`. This branch
 does not use DESeq2 factors. It writes `_SpikeInDM6_Stringent` bigWig/bedGraph
-tracks and complete audit tables. See the
+tracks and complete audit tables. By default it also writes raw and CPM
+stringent dm6 controls in standard dm6 coordinates with a separate UCSC track
+definition. See the
 [v4.2.0 update note](v4.2.0_DROSOPHILA_SPIKEIN_UPDATE_2026-08-20.md).
 
 ---

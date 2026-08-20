@@ -237,6 +237,7 @@ values further.
 | `PERMISSIVE_MIN_MAPQ` | MAPQ threshold for duplicates-retained sensitivity BAMs | `0` |
 | `INTERMEDIATE_MIN_MAPQ` | MAPQ threshold for deduplicated sensitivity BAMs | `0` |
 | `GENERATE_DROSOPHILA_SPIKEIN_STRINGENT_TRACKS` | Run independent stringent dm6 calibration; requires samplesheet declarations | `false` |
+| `GENERATE_DROSOPHILA_CONTROL_TRACKS` | With spike-in mode enabled, generate raw and CPM dm6 control bigWig/bedGraph files | `true` |
 | `SPIKEIN_MIN_MAPQ` | Minimum composite-alignment MAPQ for both host and dm6 | `30` |
 | `SPIKEIN_SCALE_TARGET` | Fixed retained-dm6 target in the scale formula | `1000000` |
 | `SPIKEIN_CANONICAL_CONTIGS` | Comma-separated dm6 chromosomes included in counts | `2L,2R,3L,3R,4,X` |

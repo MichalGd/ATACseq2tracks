@@ -99,6 +99,7 @@ mkdir -p \
     "${OUTPUT_DIR}/coverage_filtering_sensitivity" \
     "${OUTPUT_DIR}/coverage_filtering_policy_bams" \
     "${OUTPUT_DIR}/bigwig_spikein/stringent" \
+    "${OUTPUT_DIR}/bigwig_spikein/dm6_control" \
     "${OUTPUT_DIR}/spikein/composite_bams" \
     "${OUTPUT_DIR}/spikein/dedup_bams" \
     "${OUTPUT_DIR}/spikein/stringent_host_bams" \
@@ -345,6 +346,14 @@ if is_done 13; then skip_msg 13; else
             "${OUTPUT_DIR}/bigwig_spikein/stringent" "$SPIKEIN_URL" \
             "${UCSC_TRACK_PREFIX:-ATAC-seq} dm6 spike-in stringent"
     fi
+    if find "${OUTPUT_DIR}/bigwig_spikein/dm6_control" -maxdepth 1 -name '*.bw' -print -quit | grep -q .; then
+        DM6_CONTROL_URL="${UCSC_BIGDATA_URL_BASE:+${UCSC_BIGDATA_URL_BASE%/}/spikein/dm6_control}"
+        bash "${SCRIPT_DIR}/create_ucsc_tracks.sh" \
+            "${OUTPUT_DIR}/bigwig_spikein/dm6_control" "$DM6_CONTROL_URL" \
+            "${UCSC_TRACK_PREFIX:-ATAC-seq} dm6 calibration control"
+        mv "${OUTPUT_DIR}/bigwig_spikein/dm6_control/ucsc_tracks.txt" \
+            "${OUTPUT_DIR}/bigwig_spikein/dm6_control/ucsc_tracks_dm6.txt"
+    fi
     if find "${OUTPUT_DIR}/bigwig_merged" -maxdepth 1 -name '*.bw' -print -quit | grep -q .; then
         MERGED_URL="${UCSC_BIGDATA_URL_BASE:+${UCSC_BIGDATA_URL_BASE%/}/merged}"
         bash "${SCRIPT_DIR}/create_ucsc_tracks.sh" \
@@ -399,6 +408,7 @@ echo "  DESeq2 tracks        : ${OUTPUT_DIR}/bigwig_deseq2_consensus/"
 echo "  DESeq2 robust CPM    : ${OUTPUT_DIR}/bigwig_deseq2_robust_cpm/"
 echo "  Filtering sensitivity: ${OUTPUT_DIR}/coverage_filtering_sensitivity/"
 echo "  dm6 spike-in tracks  : ${OUTPUT_DIR}/bigwig_spikein/stringent/"
+echo "  dm6 control tracks   : ${OUTPUT_DIR}/bigwig_spikein/dm6_control/"
 echo "  dm6 spike-in QC      : ${OUTPUT_DIR}/spikein/tables/"
 echo "  Merged CPM    : ${OUTPUT_DIR}/bigwig_merged/"
 echo "  Peaks narrow  : ${OUTPUT_DIR}/peaks/per_replicate/<sample>/narrow/"

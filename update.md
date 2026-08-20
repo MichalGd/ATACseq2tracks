@@ -11,6 +11,12 @@ alignment. Raw host coverage is scaled by a fixed retained-dm6 target, adjusted
 for the declared pre-tagmentation dm6:host input ratio; it is not combined with
 DESeq2 robust-CPM.
 
+The same stringent dm6 BAM also generates raw (`scale=1`) and dm6-CPM
+(`10^6/retained_dm6_count`) bigWig/bedGraph controls by default whenever the
+spike-in module is enabled. These files use standard dm6 chromosome names and a
+separate `ucsc_tracks_dm6.txt`; disable only these controls with
+`GENERATE_DROSOPHILA_CONTROL_TRACKS=false`.
+
 See
 [`docs/v4.2.0_DROSOPHILA_SPIKEIN_UPDATE_2026-08-20.md`](docs/v4.2.0_DROSOPHILA_SPIKEIN_UPDATE_2026-08-20.md)
 for methods, inputs, formula, outputs, QC and limitations, and

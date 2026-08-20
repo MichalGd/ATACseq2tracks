@@ -149,6 +149,9 @@ INTERMEDIATE_MIN_MAPQ=0
 # fixed scale of SPIKEIN_SCALE_TARGET / retained dm6 fragments (PE) or reads
 # (SE), adjusted by the declared per-sample spikein_to_host_ratio.
 GENERATE_DROSOPHILA_SPIKEIN_STRINGENT_TRACKS=false
+# When spike-in processing is enabled, also write raw and dm6-CPM control
+# tracks in dm6 coordinates. Disable only to save final-output storage.
+GENERATE_DROSOPHILA_CONTROL_TRACKS=true
 SPIKEIN_MIN_MAPQ=30
 SPIKEIN_SCALE_TARGET=1000000
 SPIKEIN_CANONICAL_CONTIGS="2L,2R,3L,3R,4,X"

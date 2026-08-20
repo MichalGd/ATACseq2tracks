@@ -32,7 +32,9 @@ Setup
    family. Disabling permissive/intermediate also skips its BAM filtering.
 9. dm6 calibration remains off by default. To enable it, use the spike-in
    example sheet, configure INDEX_*_DM6/CHROM_SIZES_DM6/BLACKLIST_DM6 and set
-   GENERATE_DROSOPHILA_SPIKEIN_STRINGENT_TRACKS=true.
+   GENERATE_DROSOPHILA_SPIKEIN_STRINGENT_TRACKS=true. Raw and CPM dm6 UCSC
+   control tracks are then produced by default; disable only those controls with
+   GENERATE_DROSOPHILA_CONTROL_TRACKS=false.
 10. Run the main entry point with:
 
    bash /path/to/ATACseq2tracks/atacseq2tracks.sh \

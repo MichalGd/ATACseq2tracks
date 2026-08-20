@@ -32,8 +32,9 @@ LOG_DIR="${SPIKE_ROOT}/logs"
 TABLE_DIR="${SPIKE_ROOT}/tables"
 PER_SAMPLE_TABLE_DIR="${TABLE_DIR}/per_sample"
 TRACK_DIR="${OUTPUT_DIR}/bigwig_spikein/stringent"
+DM6_CONTROL_TRACK_DIR="${OUTPUT_DIR}/bigwig_spikein/dm6_control"
 mkdir -p "$COMPOSITE_BAM_DIR" "$DEDUP_BAM_DIR" "$HOST_BAM_DIR" "$DM6_BAM_DIR" \
-    "$LOG_DIR" "$TABLE_DIR" "$PER_SAMPLE_TABLE_DIR" "$TRACK_DIR"
+    "$LOG_DIR" "$TABLE_DIR" "$PER_SAMPLE_TABLE_DIR" "$TRACK_DIR" "$DM6_CONTROL_TRACK_DIR"
 
 SAMPLE_TABLE="${TABLE_DIR}/declared_spikein_samples.tsv"
 python3 "${SCRIPT_DIR}/extract_spikein_samples.py" "$SAMPLESHEET" > "$SAMPLE_TABLE"
@@ -96,8 +97,9 @@ printf 'key\twarning_type\tvalue\tthreshold\tmessage\n' > "$WARNINGS_FILE"
 process_sample() {
     local i="$1" key layout host_genome host_blacklist ratio index composite_bam dedup_bam
     local host_bam dm6_bam metrics_file row_file warning_file log_file r1 r2 staging
-    local host_count dm6_count combined_count fly_fraction scale duplicate_pct q0 q30 low_mapq
-    local bw bg tmp_track_dir index_sha host_blacklist_sha dm6_blacklist_sha outputs_complete
+    local host_count dm6_count combined_count fly_fraction scale dm6_cpm_scale duplicate_pct q0 q30 low_mapq
+    local bw bg dm6_raw_bw dm6_raw_bg dm6_cpm_bw dm6_cpm_bg
+    local tmp_track_dir index_sha host_blacklist_sha dm6_blacklist_sha outputs_complete
     key="${KEYS[$i]}"; layout="${LAYOUTS[$i]}"; host_genome="${HOST_GENOMES[$i]}"
     host_blacklist="${HOST_BLACKLISTS[$i]}"; ratio="${RATIOS[$i]}"; index="${COMPOSITE_INDICES[$i]}"
     composite_bam="${COMPOSITE_BAM_DIR}/${key}_host_dm6.bam"
@@ -110,11 +112,21 @@ process_sample() {
     log_file="${LOG_DIR}/${key}.log"
     bw="${TRACK_DIR}/${key}_SpikeInDM6_Stringent.bw"
     bg="${TRACK_DIR}/${key}_SpikeInDM6_Stringent.bedGraph"
+    dm6_raw_bw="${DM6_CONTROL_TRACK_DIR}/${key}_dm6_StringentRaw.bw"
+    dm6_raw_bg="${DM6_CONTROL_TRACK_DIR}/${key}_dm6_StringentRaw.bedGraph"
+    dm6_cpm_bw="${DM6_CONTROL_TRACK_DIR}/${key}_dm6_StringentCPM.bw"
+    dm6_cpm_bg="${DM6_CONTROL_TRACK_DIR}/${key}_dm6_StringentCPM.bedGraph"
     : > "$warning_file"
 
     outputs_complete=true
     [[ "${GENERATE_COVERAGE_BIGWIGS:-true}" == "true" && ! -s "$bw" ]] && outputs_complete=false
     [[ "${GENERATE_COVERAGE_BEDGRAPHS:-true}" == "true" && ! -s "$bg" ]] && outputs_complete=false
+    if [[ "${GENERATE_DROSOPHILA_CONTROL_TRACKS:-true}" == "true" ]]; then
+        [[ "${GENERATE_COVERAGE_BIGWIGS:-true}" == "true" && \
+           ( ! -s "$dm6_raw_bw" || ! -s "$dm6_cpm_bw" ) ]] && outputs_complete=false
+        [[ "${GENERATE_COVERAGE_BEDGRAPHS:-true}" == "true" && \
+           ( ! -s "$dm6_raw_bg" || ! -s "$dm6_cpm_bg" ) ]] && outputs_complete=false
+    fi
     [[ ! -s "$row_file" ]] && outputs_complete=false
     if [[ "$outputs_complete" == "true" ]]; then
         echo "SKIP existing spike-in tracks: $key"
@@ -174,6 +186,10 @@ process_sample() {
         echo "ERROR: invalid spike-in scale inputs for $key" >&2
         return 1
     }
+    dm6_cpm_scale="$(spikein_scale_factor 1000000 1 "$dm6_count")" || {
+        echo "ERROR: invalid dm6 CPM scale inputs for $key" >&2
+        return 1
+    }
 
     if [[ "$layout" == "PE" ]]; then
         q0="$(samtools view -c -f 66 -F 3852 "$dedup_bam")"
@@ -210,6 +226,28 @@ process_sample() {
             "$scale" "$layout" "${TRACK_BIN_SIZE:-10}" "$THREADS_BIGWIG_VALUE"
         mv "${tmp_track_dir}/$(basename "$bg")" "$bg"
     fi
+    if [[ "${GENERATE_DROSOPHILA_CONTROL_TRACKS:-true}" == "true" ]]; then
+        if [[ "${GENERATE_COVERAGE_BIGWIGS:-true}" == "true" ]]; then
+            write_scaled_coverage_track "$dm6_bam" \
+                "${tmp_track_dir}/$(basename "$dm6_raw_bw")" bigwig \
+                1 "$layout" "${TRACK_BIN_SIZE:-10}" "$THREADS_BIGWIG_VALUE"
+            write_scaled_coverage_track "$dm6_bam" \
+                "${tmp_track_dir}/$(basename "$dm6_cpm_bw")" bigwig \
+                "$dm6_cpm_scale" "$layout" "${TRACK_BIN_SIZE:-10}" "$THREADS_BIGWIG_VALUE"
+            mv "${tmp_track_dir}/$(basename "$dm6_raw_bw")" "$dm6_raw_bw"
+            mv "${tmp_track_dir}/$(basename "$dm6_cpm_bw")" "$dm6_cpm_bw"
+        fi
+        if [[ "${GENERATE_COVERAGE_BEDGRAPHS:-true}" == "true" ]]; then
+            write_scaled_coverage_track "$dm6_bam" \
+                "${tmp_track_dir}/$(basename "$dm6_raw_bg")" bedgraph \
+                1 "$layout" "${TRACK_BIN_SIZE:-10}" "$THREADS_BIGWIG_VALUE"
+            write_scaled_coverage_track "$dm6_bam" \
+                "${tmp_track_dir}/$(basename "$dm6_cpm_bg")" bedgraph \
+                "$dm6_cpm_scale" "$layout" "${TRACK_BIN_SIZE:-10}" "$THREADS_BIGWIG_VALUE"
+            mv "${tmp_track_dir}/$(basename "$dm6_raw_bg")" "$dm6_raw_bg"
+            mv "${tmp_track_dir}/$(basename "$dm6_cpm_bg")" "$dm6_cpm_bg"
+        fi
+    fi
     rmdir "$tmp_track_dir"; trap - EXIT
 
     index_sha="$({
@@ -222,11 +260,11 @@ process_sample() {
     } | sha256sum | awk '{print $1}')"
     host_blacklist_sha="$(sha256sum "$host_blacklist" | awk '{print $1}')"
     dm6_blacklist_sha="$(sha256sum "$BLACKLIST_DM6" | awk '{print $1}')"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "$key" "$host_genome" dm6 "$layout" "$(signal_unit_for_layout "$layout")" \
         "${CONTROL_STATES[$i]}" "${STAGES[$i]}" "$ratio" "$MINIMUM_MAPQ" true \
         "$host_count" "$dm6_count" "$fly_fraction" "$q0" "$q30" "$low_mapq" \
-        "$duplicate_pct" "$SCALE_TARGET" "$scale" "$index" "$index_sha" \
+        "$duplicate_pct" "$SCALE_TARGET" "$scale" 1 "$dm6_cpm_scale" "$index" "$index_sha" \
         "${host_blacklist_sha}:${dm6_blacklist_sha}" > "$row_file"
     echo "Spike-in tracks complete: key=$key host=$host_count dm6=$dm6_count scale=$scale"
 }
@@ -242,7 +280,7 @@ parallel_pool_wait_all || {
 }
 
 NORMALIZATION_TABLE="${TABLE_DIR}/spikein_normalization.tsv"
-printf 'key\thost_genome\tspikein_genome\tlayout\tsignal_unit\tis_control\tspikein_stage\tspikein_to_host_ratio\tminimum_mapq\tduplicates_removed\thost_signal_count\tdm6_signal_count\tdm6_fraction\tcomposite_primary_q0\tcomposite_primary_q_threshold\tlow_mapq_primary\tpercent_duplication\tscale_target\tapplied_scale\tcomposite_index\tcomposite_index_sha256\tblacklist_sha256_host_dm6\n' \
+printf 'key\thost_genome\tspikein_genome\tlayout\tsignal_unit\tis_control\tspikein_stage\tspikein_to_host_ratio\tminimum_mapq\tduplicates_removed\thost_signal_count\tdm6_signal_count\tdm6_fraction\tcomposite_primary_q0\tcomposite_primary_q_threshold\tlow_mapq_primary\tpercent_duplication\tscale_target\tapplied_scale\tdm6_raw_scale\tdm6_cpm_scale\tcomposite_index\tcomposite_index_sha256\tblacklist_sha256_host_dm6\n' \
     > "$NORMALIZATION_TABLE"
 for key in "${KEYS[@]}"; do
     cat "${PER_SAMPLE_TABLE_DIR}/${key}.normalization.tsv" >> "$NORMALIZATION_TABLE"
@@ -258,5 +296,8 @@ printf 'field\tvalue\nworkflow_version\t4.2.0\nformula\traw_host_coverage_x_scal
 
 echo "Drosophila spike-in module complete"
 echo "  Tracks    : $TRACK_DIR"
+if [[ "${GENERATE_DROSOPHILA_CONTROL_TRACKS:-true}" == "true" ]]; then
+    echo "  dm6 QC    : $DM6_CONTROL_TRACK_DIR"
+fi
 echo "  Metadata  : $NORMALIZATION_TABLE"
 echo "  Warnings  : $WARNINGS_FILE"

@@ -45,6 +45,7 @@ INDEX_MM39_DM6="$TMP_ROOT/index/mm39_dm6"
 BLACKLIST_DM6="$TMP_ROOT/dm6.blacklist.bed"
 CHROM_SIZES_DM6="$TMP_ROOT/dm6.chrom.sizes"
 GENERATE_DROSOPHILA_SPIKEIN_STRINGENT_TRACKS=true
+GENERATE_DROSOPHILA_CONTROL_TRACKS=true
 GENERATE_COVERAGE_BIGWIGS=true
 GENERATE_COVERAGE_BEDGRAPHS=true
 SPIKEIN_MIN_MAPQ=30
@@ -104,7 +105,8 @@ while (( $# )); do
     *) shift ;;
   esac
 done
-[[ "$scale" == "500" ]] || { echo "wrong mocked scale: $scale" >&2; exit 1; }
+[[ "$scale" == "500" || "$scale" == "1" ]] \
+    || { echo "wrong mocked scale: $scale" >&2; exit 1; }
 printf 'mock-track\n' > "$output"
 EOF
 cat > "$TMP_ROOT/bin/bowtie2" <<'EOF'
@@ -129,11 +131,22 @@ PATH="$TMP_ROOT/bin:$PATH" F2T_CONFIG="$TMP_ROOT/config.conf" \
 BW="$TMP_ROOT/output/bigwig_spikein/stringent/${key}_SpikeInDM6_Stringent.bw"
 BG="$TMP_ROOT/output/bigwig_spikein/stringent/${key}_SpikeInDM6_Stringent.bedGraph"
 TABLE="$TMP_ROOT/output/spikein/tables/spikein_normalization.tsv"
+DM6_RAW_BW="$TMP_ROOT/output/bigwig_spikein/dm6_control/${key}_dm6_StringentRaw.bw"
+DM6_RAW_BG="$TMP_ROOT/output/bigwig_spikein/dm6_control/${key}_dm6_StringentRaw.bedGraph"
+DM6_CPM_BW="$TMP_ROOT/output/bigwig_spikein/dm6_control/${key}_dm6_StringentCPM.bw"
+DM6_CPM_BG="$TMP_ROOT/output/bigwig_spikein/dm6_control/${key}_dm6_StringentCPM.bedGraph"
 [[ -s "$BW" && -s "$BG" && -s "$TABLE" ]]
-awk -F '\t' 'NR==2 {exit !($12==2000 && $18==1000000 && $19==500)}' "$TABLE"
+[[ -s "$DM6_RAW_BW" && -s "$DM6_RAW_BG" && -s "$DM6_CPM_BW" && -s "$DM6_CPM_BG" ]]
+awk -F '\t' 'NR==2 {exit !($12==2000 && $18==1000000 && $19==500 && $20==1 && $21==500)}' "$TABLE"
 grep -Fq $'sampleA_bioR1\tlow_dm6_count\t2000\t10000' \
     "$TMP_ROOT/output/spikein/tables/spikein_warnings.tsv"
 echo "OK   mocked stringent spike-in tracks, metadata and warning"
+echo "OK   raw and CPM dm6 UCSC control-track outputs"
+
+grep -Fq 'ucsc_tracks_dm6.txt' "${REPO_DIR}/atacseq2tracks.sh"
+grep -Fq '*_dm6_StringentRaw' "${REPO_DIR}/scripts/create_ucsc_tracks.sh"
+grep -Fq '*_dm6_StringentCPM' "${REPO_DIR}/scripts/create_ucsc_tracks.sh"
+echo "OK   dm6-specific UCSC track-definition contract"
 
 # Legacy sheets remain valid when spike-in mode is not requested, while
 # partial declarations are rejected.

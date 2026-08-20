@@ -15,6 +15,9 @@
   parallelism and success-only BAM cleanup.
 - Add a shared-reference preparation utility, mocked regression test and safe
   immutable all-user deployment guide.
+- Generate raw and CPM stringent dm6 bigWig/bedGraph control tracks by default
+  whenever spike-in processing is enabled. Use standard dm6 chromosome names,
+  a separate UCSC-dm6 track definition and independently configurable output.
 
 ## v4.1.0 - 2026-08-20
 

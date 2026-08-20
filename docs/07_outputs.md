@@ -64,6 +64,11 @@
 │   ├── <sample_id>_bioR<N>_SpikeInDM6_Stringent.bw
 │   └── <sample_id>_bioR<N>_SpikeInDM6_Stringent.bedGraph
 │
+├── bigwig_spikein/dm6_control/         # UCSC dm6 calibration-control tracks
+│   ├── <sample_id>_bioR<N>_dm6_StringentRaw.{bw,bedGraph}
+│   ├── <sample_id>_bioR<N>_dm6_StringentCPM.{bw,bedGraph}
+│   └── ucsc_tracks_dm6.txt
+│
 ├── spikein/
 │   ├── tables/spikein_normalization.tsv
 │   ├── tables/spikein_warnings.tsv
@@ -163,6 +168,11 @@ normalization. It scales raw stringent host coverage by
 Interpret it only with `spikein_normalization.tsv` and `spikein_warnings.tsv`.
 It can support global-shift comparisons when the reference was added correctly,
 but it does not remove study or protocol batch effects.
+
+Raw dm6 controls retain the actual fly yield (`scale=1`) and are the primary
+denominator audit. dm6 CPM controls use `10^6/dm6_count` and are intended for
+coverage-shape and replicate-correlation QC. They are UCSC-compatible only when
+loaded against the dm6 assembly.
 
 ### MACS2 peak files
 

@@ -17,6 +17,7 @@ ATACseq2tracks is a samplesheet-driven Bash workflow for bulk ATAC-seq and relat
 - DESeq2 size factors calculated from counts within the consensus peak set;
 - DESeq2-consensus and permissive/intermediate/stringent DESeq2-robust-CPM bigWig/bedGraph tracks;
 - optional stringent host coverage calibrated directly to retained dm6 spike-in fragments/reads after competitive host+dm6 alignment;
+- raw and dm6-CPM stringent fly control tracks for calibration-denominator and spatial-profile QC;
 - deepTools QC: FRiP, fingerprints, PCA, correlations, signal heatmaps and chromosome coverage;
 - ATAC-specific `ataqv` QC: ENCODE-style TSS enrichment and short/mononucleosomal ratio;
 - full-scan paired-end fragment-size and nucleosome-periodicity metrics with PNG/PDF plots;
@@ -104,6 +105,12 @@ Five inherited coverage families are produced by default and can be switched off
 For each robust policy, the cohort constant is `exp(mean(log(colSums(K_policy))))`. Every policy uses the same fixed consensus BED but receives its own count matrix, DESeq2 size factors and cohort constant. Within one policy, robust CPM is the corresponding DESeq2-consensus signal multiplied by one cohort-wide constant; it changes the units, not relative sample scaling. The permissive and intermediate families are sensitivity outputs, while stringent remains the primary default for interpretation. These tracks are visualization outputs and are not used as count input for differential testing.
 
 When explicitly enabled, `bigwig_spikein/stringent/*_SpikeInDM6_Stringent.{bw,bedGraph}` is a sixth, independent family. Reads are competitively aligned once to a host+dm6 composite reference, duplicates are removed, and host/dm6 observations are restricted to primary canonical alignments at `SPIKEIN_MIN_MAPQ=30` with blacklist removal. Raw stringent host coverage is multiplied by `SPIKEIN_SCALE_TARGET × spikein_to_host_ratio / retained_dm6_observations`. It is not layered on DESeq2 robust-CPM, so library depth is not normalized twice. Use it only when dm6 material was added before tagmentation and the samplesheet declares valid spike-in metadata. It calibrates technical recovery; it does not remove study batch effects or make arbitrary studies absolutely comparable.
+
+The same species-separated dm6 BAM also produces UCSC-dm6-compatible raw and
+CPM control tracks by default. Raw tracks use scale 1 and expose actual recovered
+fly abundance; CPM tracks use `10^6 / retained_dm6_observations` and compare the
+spatial fly accessibility profile after removing total-yield differences. Set
+`GENERATE_DROSOPHILA_CONTROL_TRACKS=false` to disable only these controls.
 
 For paired-end data, one properly paired first-mate alignment represents each fragment and deepTools extends it across the insert. For single-end data, `SE_SIGNAL_MODE="read"` counts each retained alignment once and does not invent a fragment or extend the read. The same layout-specific unit is used for CPM, consensus-peak counts and every DESeq2-derived track family.
 
@@ -259,6 +266,7 @@ RUN_MOTIF_ENRICHMENT=false
 ENABLE_AUTOMATIC_CLEANUP=true
 KEEP_NORMALIZATION_POLICY_BAMS=false
 GENERATE_DROSOPHILA_SPIKEIN_STRINGENT_TRACKS=false
+GENERATE_DROSOPHILA_CONTROL_TRACKS=true
 SPIKEIN_MIN_MAPQ=30
 SPIKEIN_SCALE_TARGET=1000000
 SPIKEIN_MIN_FRAGMENTS_FAIL=1000
@@ -325,6 +333,7 @@ bash atacseq2tracks.sh --config /absolute/path/to/project/config/config.conf
 │   └── stringent/                      *_DESeq2RobustCPM_Stringent.{bw,bedGraph}
 ├── coverage_filtering_sensitivity/     matrices, factors and combined metadata
 ├── bigwig_spikein/stringent/           *_SpikeInDM6_Stringent.{bw,bedGraph}
+├── bigwig_spikein/dm6_control/         *_dm6_Stringent{Raw,CPM}.{bw,bedGraph}
 ├── spikein/tables/                     calibration, QC warnings and provenance
 ├── bigwig_merged/                      merged CPM tracks
 ├── filteredBams/                       quantitative analysis BAMs
@@ -425,6 +434,8 @@ Then execute small PE-only and SE-only datasets with at least two biological sam
 - when spike-in mode is enabled, composite indices contain all six Bowtie2
   components, dm6 counts exceed the hard threshold, both spike-in track formats
   are non-empty, and `applied_scale = target × declared_ratio / dm6_count`;
+- raw dm6 controls use scale 1, dm6 CPM controls use `10^6/dm6_count`, expose
+  only standard dm6 canonical chromosome names and have `ucsc_tracks_dm6.txt`;
 - computational downsampling of the same library gives stable calibrated host
   signal within sampling error, while intentionally altered host:dm6 mixtures
   change the scale in the expected direction.

@@ -8,7 +8,13 @@ TRACK_FILE="${BIGWIG_DIR}/ucsc_tracks.txt"; : > "$TRACK_FILE"; count=0
 while IFS= read -r bw; do
     file="$(basename "$bw")"; name="${file%.bw}"; url="$file"
     [[ -n "$URL_BASE" ]] && url="${URL_BASE%/}/${file}"
-    if [[ "$name" == *_DESeq2RobustCPM || "$name" == *_DESeq2RobustCPM_* ]]; then
+    if [[ "$name" == *_dm6_StringentRaw ]]; then
+        description="${PREFIX} raw stringent dm6 coverage"; color="90,90,90"
+    elif [[ "$name" == *_dm6_StringentCPM ]]; then
+        description="${PREFIX} dm6 CPM profile control"; color="40,140,90"
+    elif [[ "$name" == *_SpikeInDM6_Stringent ]]; then
+        description="${PREFIX} dm6-calibrated stringent host coverage"; color="210,110,20"
+    elif [[ "$name" == *_DESeq2RobustCPM || "$name" == *_DESeq2RobustCPM_* ]]; then
         description="${PREFIX} DESeq2 robust CPM"; color="120,50,160"
     elif [[ "$name" == *_DESeq2Consensus ]]; then
         description="${PREFIX} DESeq2 consensus-peak normalized"; color="180,50,50"
