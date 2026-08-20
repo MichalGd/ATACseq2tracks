@@ -2,6 +2,20 @@
 
 ## v4.0.0 - 2026-08-19
 
+### Reporting and DiffBind hotfix - 2026-08-20
+
+- Canonical- and blacklist-filter every original broad/narrow peak file before
+  the first DiffBind `dba()`/`dba.count()` call, then reuse those filtered paths
+  for the eligible-condition recount.
+- Preserve original peak columns and write a per-sample filtering manifest plus
+  the exact prefiltered DiffBind samplesheet for auditability.
+- Exclude the incompatible native MultiQC 1.35 deepTools parser while embedding
+  the existing deepTools PNG outputs as self-contained custom-content sections.
+- Prevent duplicate deepTools sample replacement, PCA-table validation errors
+  and RGB-triplet conversion errors in the unified report.
+- Treat caught MultiQC module/validation/colour failures and missing report
+  outputs as real Step 14 failures instead of checkpointing a partial report.
+
 - Promote the cumulative multi-condition, annotation, normalization,
   correctness and performance update to the unambiguous 4.0.0 release line.
 - Update runtime banners, validation labels, templates, active documentation,

@@ -41,6 +41,24 @@ write_failure_summary() {
         "$peak_type" "$DIFFBIND_ALPHA" "$MIN_ABS_LOG2FC" \
         "$output/diffbind_summary.txt" "$message" >> "$table"
 }
+validate_diffbind_output() {
+    local output="$1" annotation_enabled="$2" required
+    for required in diffbind_peak_prefilter_manifest.tsv \
+        diffbind_samplesheet_prefiltered.csv diffbind_consensus_peaks.bed \
+        differential_accessibility_condition_eligibility.tsv \
+        differential_accessibility_comparisons.tsv diffbind_summary.txt \
+        diffbind_log.txt; do
+        [[ -s "$output/$required" ]] || {
+            echo "ERROR: DiffBind output missing or empty: $output/$required" >&2
+            return 1
+        }
+    done
+    if [[ "$annotation_enabled" == "true" && \
+          ! -s "$output/diffbind_consensus_peak_annotations.tsv.gz" ]]; then
+        echo "ERROR: DiffBind consensus annotation missing or empty: $output/diffbind_consensus_peak_annotations.tsv.gz" >&2
+        return 1
+    fi
+}
 found=0
 runnable=0
 failures=0
@@ -94,6 +112,9 @@ for SS in "$DIFFBIND_DIR"/diffbind_samplesheet_*_*.csv; do
         "$PROMOTER_UPSTREAM" "$PROMOTER_DOWNSTREAM" "$BLACKLIST"; then
         echo "ERROR: DiffBind failed for $BASE; other peak types remain eligible to run" >&2
         write_failure_summary "$SAMPLE_OUT" "$PEAK_TYPE" "DiffBind model or export failed; inspect diffbind_log.txt"
+        failures=$((failures + 1))
+    elif ! validate_diffbind_output "$SAMPLE_OUT" "$ANNOTATE"; then
+        write_failure_summary "$SAMPLE_OUT" "$PEAK_TYPE" "DiffBind output validation failed"
         failures=$((failures + 1))
     fi
 done

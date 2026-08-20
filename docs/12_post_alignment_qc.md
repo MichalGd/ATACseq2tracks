@@ -364,7 +364,7 @@ THREADS_DEEPTOOLS=16   # threads for deepTools steps; set to available CPUs / 2
 | Zero-peak sample handling | crashes | graceful — flagged, not dropped |
 | Requires R / Bioconductor | yes | no |
 | Requires RDS annotation files | yes | no |
-| MultiQC integration | partial | yes (deepTools outputs parsed automatically) |
+| MultiQC integration | partial | yes (validated static deepTools plots embedded as custom content) |
 
 ---
 

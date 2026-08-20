@@ -60,6 +60,99 @@ write_tsv_gz <- function(x, path) {
                 col.names = TRUE, quote = FALSE, na = "NA")
 }
 
+read_peak_table <- function(path) {
+    if (!file.exists(path)) stop("Peak file not found: ", path)
+    table <- read.delim(
+        path, header = FALSE, sep = "\t", quote = "", comment.char = "#",
+        fill = TRUE, colClasses = "character", check.names = FALSE
+    )
+    if (!nrow(table) || ncol(table) < 3L) {
+        stop("Peak file is empty or has fewer than three BED columns: ", path)
+    }
+    starts <- suppressWarnings(as.integer(table[[2L]]))
+    ends <- suppressWarnings(as.integer(table[[3L]]))
+    if (anyNA(starts) || anyNA(ends) || any(starts < 0L) || any(ends <= starts)) {
+        stop("Peak file has invalid BED coordinates: ", path)
+    }
+    list(table = table, starts = starts, ends = ends)
+}
+
+prefilter_diffbind_peaks <- function(samples, output_dir, genome, blacklist_file = "") {
+    required <- c("SampleID", "Peaks")
+    missing <- setdiff(required, names(samples))
+    if (length(missing)) {
+        stop("DiffBind sample sheet lacks peak-filtering column(s): ",
+             paste(missing, collapse = ", "))
+    }
+
+    filtered_dir <- file.path(output_dir, "prefiltered_peaks")
+    dir.create(filtered_dir, recursive = TRUE, showWarnings = FALSE)
+    blacklist <- NULL
+    if (blacklist_file != "") {
+        blacklist <- annotation_canonicalize(rtracklayer::import(blacklist_file), genome)
+    }
+
+    filtered <- samples
+    manifest_rows <- vector("list", nrow(samples))
+    allowed <- c(annotation_canonical_names(genome, TRUE),
+                 annotation_canonical_names(genome, FALSE))
+
+    for (index in seq_len(nrow(samples))) {
+        source_path <- as.character(samples$Peaks[[index]])
+        parsed <- read_peak_table(source_path)
+        peak_table <- parsed$table
+        peak_ranges <- GenomicRanges::GRanges(
+            seqnames = as.character(peak_table[[1L]]),
+            ranges = IRanges::IRanges(start = parsed$starts + 1L, end = parsed$ends)
+        )
+        canonical <- as.character(GenomicRanges::seqnames(peak_ranges)) %in% allowed
+        blacklisted <- rep(FALSE, length(peak_ranges))
+        if (!is.null(blacklist) && any(canonical)) {
+            candidate_indexes <- which(canonical)
+            harmonized_blacklist <- annotation_harmonize_seqnames(
+                blacklist,
+                unique(as.character(GenomicRanges::seqnames(peak_ranges[candidate_indexes])))
+            )
+            blacklisted[candidate_indexes] <- IRanges::overlapsAny(
+                peak_ranges[candidate_indexes], harmonized_blacklist,
+                ignore.strand = TRUE
+            )
+        }
+        retain <- canonical & !blacklisted
+        if (!any(retain)) {
+            stop("No canonical, non-blacklisted peaks remain for sample ",
+                 samples$SampleID[[index]], ": ", source_path)
+        }
+
+        filtered_path <- file.path(
+            filtered_dir,
+            paste0(sprintf("%03d_", index), safe_token(samples$SampleID[[index]]),
+                   "_canonical_nonblacklisted.bed")
+        )
+        write.table(
+            peak_table[retain, , drop = FALSE], filtered_path, sep = "\t",
+            row.names = FALSE, col.names = FALSE, quote = FALSE, na = ""
+        )
+        filtered$Peaks[[index]] <- normalizePath(filtered_path, mustWork = TRUE)
+        manifest_rows[[index]] <- data.frame(
+            sample_id = as.character(samples$SampleID[[index]]),
+            original_peak_file = source_path,
+            filtered_peak_file = filtered$Peaks[[index]],
+            input_regions = nrow(peak_table),
+            retained_regions = sum(retain),
+            noncanonical_removed = sum(!canonical),
+            blacklist_removed = sum(canonical & blacklisted),
+            stringsAsFactors = FALSE
+        )
+    }
+
+    manifest <- do.call(rbind, manifest_rows)
+    manifest_path <- file.path(output_dir, "diffbind_peak_prefilter_manifest.tsv")
+    write.table(manifest, manifest_path, sep = "\t", row.names = FALSE,
+                col.names = TRUE, quote = FALSE)
+    list(samples = filtered, manifest = manifest, manifest_path = manifest_path)
+}
+
 render_png <- function(path, code) {
     png(path, width = 1400, height = 1000, res = 150)
     tryCatch(code(), finally = dev.off())
@@ -161,10 +254,22 @@ cat("Conditions:", paste(names(condition_counts), condition_counts, sep = "=", c
 cat("Eligible model conditions:", ifelse(length(eligible_order), paste(eligible_order, collapse = ", "), "none"), "\n")
 cat("Summit half-width:", summits, "bp\n")
 
+# DiffBind merges peak sets before it exposes a consensus. Filter every original
+# BED/narrowPeak/broadPeak first so this initial merge, summit calculation and
+# all later recounting share the canonical, blacklist-free genomic universe.
+prefiltered <- prefilter_diffbind_peaks(ss, out_dir, genome, blacklist_file)
+ss_prefiltered <- prefiltered$samples
+prefiltered_ss_file <- file.path(out_dir, "diffbind_samplesheet_prefiltered.csv")
+write.csv(ss_prefiltered, prefiltered_ss_file, row.names = FALSE, quote = TRUE)
+cat("Peak prefiltering:", sum(prefiltered$manifest$input_regions), "input;",
+    sum(prefiltered$manifest$retained_regions), "canonical non-blacklisted retained;",
+    sum(prefiltered$manifest$noncanonical_removed), "noncanonical removed;",
+    sum(prefiltered$manifest$blacklist_removed), "blacklisted removed\n")
+
 # Count all samples first. This is the authoritative DiffBind all-sample
 # consensus, including samples from conditions that are later model-ineligible.
 dba_all <- dba(
-    sampleSheet = ss_file,
+    sampleSheet = prefiltered_ss_file,
     config = list(AnalysisMethod = DBA_DESEQ2, doBlacklist = FALSE,
                   doGreylist = FALSE)
 )
@@ -242,7 +347,7 @@ if (!nrow(plan)) {
 
 # Recount only model-eligible samples on the fixed all-sample consensus. Passing
 # summits=FALSE prevents a second recentering; filter=0 preserves the universe.
-eligible_ss <- ss[ss$Condition %in% eligible_order, , drop = FALSE]
+eligible_ss <- ss_prefiltered[ss_prefiltered$Condition %in% eligible_order, , drop = FALSE]
 eligible_ss$Condition <- factor(eligible_ss$Condition, levels = eligible_order)
 eligible_ss_file <- tempfile(pattern = "diffbind_eligible_", fileext = ".csv")
 write.csv(eligible_ss, eligible_ss_file, row.names = FALSE, quote = TRUE)

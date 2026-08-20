@@ -2,7 +2,7 @@
 
 ATACseq2tracks is a samplesheet-driven Bash workflow for bulk ATAC-seq and related chromatin-profiling assays. Version 4.0.0 is the cumulative 2026-08-19 release, including universal multi-condition analysis, default peak annotation, the IRanges namespace correction and bounded later-stage parallelism. This release retains the Bash architecture; it does not introduce Nextflow or Snakemake.
 
-> Status: release candidate. The paired-end production run validated upstream processing, tracks and QC and exposed the corrected differential-analysis namespace defect. A successful resumed differential run and a representative single-end run are still required before this update should be tagged as production-ready. See [the namespace hotfix note](docs/v3.2.0_IRANGES_NAMESPACE_HOTFIX_2026-08-19.md).
+> Status: release candidate. A resumed paired-end production run completed all broad/narrow DiffBind and DESeq2ATAC comparisons. The 2026-08-20 hotfix corrects the partial MultiQC deepTools report and filters DiffBind inputs before initial consensus counting. A representative single-end production run is still required before production-ready status. See [the reporting and DiffBind hotfix note](docs/v4.0.0_REPORTING_DIFFBIND_HOTFIX_2026-08-20.md).
 
 ## Principal capabilities
 
@@ -383,7 +383,8 @@ Then execute small PE-only and SE-only datasets with at least two biological sam
 | Design or interpret differential analysis | [Differential accessibility](docs/13_differential_accessibility.md) and [Replicates and design](docs/14_replicates_and_experimental_design.md) |
 | Interpret gene-context and cCRE annotations | [Peak annotation](docs/16_peak_annotation.md) |
 | Diagnose a failure | [Troubleshooting](docs/09_troubleshooting.md) |
-| Review the v4.0.0 release | [Release scope and validation](docs/v4.0.0_RELEASE_2026-08-19.md), [application guide](APPLY_V4.0.0_2026-08-19.md) and [manifest](V4.0.0_MANIFEST_2026-08-19.tsv) |
+| Review the corrected v4.0.0 release | [Hotfix scope and validation](docs/v4.0.0_REPORTING_DIFFBIND_HOTFIX_2026-08-20.md), [application guide](APPLY_V4.0.0_REPORTING_DIFFBIND_HOTFIX_2026-08-20.md) and [manifest](V4.0.0_REPORTING_DIFFBIND_HOTFIX_MANIFEST_2026-08-20.tsv) |
+| Review the original v4.0.0 release scope | [Release scope and validation](docs/v4.0.0_RELEASE_2026-08-19.md), [application guide](APPLY_V4.0.0_2026-08-19.md) and [manifest](V4.0.0_MANIFEST_2026-08-19.tsv) |
 | Review historical v3.2.0 updates | [Scope](docs/update_3.2.0/MINIMAL_CRITICAL_IMPROVEMENTS.md), [application checks](docs/update_3.2.0/APPLY_UPDATE.md) and [manifest](docs/update_3.2.0/UPDATE_MANIFEST.md) |
 
 The complete page list is in the [documentation index](docs/README.md).

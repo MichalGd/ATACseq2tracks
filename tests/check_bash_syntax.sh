@@ -66,6 +66,13 @@ else
   status=1
 fi
 
+if bash tests/test_reporting_diffbind_hotfix.sh; then
+  echo "OK   reporting and DiffBind prefilter hotfix checks"
+else
+  echo "FAIL reporting and DiffBind prefilter hotfix checks"
+  status=1
+fi
+
 "$PYTHON_BIN" - <<'PY' || status=1
 import ast
 from pathlib import Path

@@ -1,0 +1,16 @@
+path	purpose
+scripts/diffbind_analysis.R	Filter original peak inputs to the canonical, blacklist-free universe before initial DiffBind counting
+scripts/diffbind_analysis.sh	Validate the filtering manifest, filtered samplesheet, consensus, summaries and annotations
+scripts/generate_pipeline_report.sh	Replace incompatible native deepTools parsing with validated static custom-content plots
+tests/test_reporting_diffbind_hotfix.sh	Focused DiffBind prefilter and mocked MultiQC regression checks
+tests/check_bash_syntax.sh	Run the new focused regression test
+README.md	Update production-run validation status and hotfix pointer
+CHANGELOG.md	Record the 2026-08-20 corrections
+update.md	Point the cumulative snapshot to the current reporting and DiffBind correction
+docs/README.md	Add the current hotfix to the documentation index
+docs/07_outputs.md	Document stable MultiQC handling and report log validation
+docs/12_post_alignment_qc.md	Correct the deepTools MultiQC integration description
+docs/13_differential_accessibility.md	Document exact pre-count filtering and audit outputs
+docs/v4.0.0_RELEASE_2026-08-19.md	Point the original release note to the cumulative correction
+docs/v4.0.0_REPORTING_DIFFBIND_HOTFIX_2026-08-20.md	Scope, rationale, behavior and validation
+APPLY_V4.0.0_REPORTING_DIFFBIND_HOTFIX_2026-08-20.md	Server installation and report-only rerun instructions

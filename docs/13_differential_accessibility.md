@@ -51,11 +51,17 @@ This passes `summits=100` to `DiffBind::dba.count()` and produces approximately
 201-bp summit-centred counting windows. Set `DIFFBIND_SUMMITS=200` to reproduce
 the previous approximately 401-bp behavior.
 
-DiffBind first calls `dba.count(minOverlap=2, summits=...)` with every valid
-biological sample. The resulting consensus is restricted to canonical autosomes
-and X/Y and intervals overlapping the configured blacklist are removed. DiffBind
-then recounts only model-eligible samples on that fixed, already recentered
-all-sample consensus with `summits=FALSE` and `filter=0`. This keeps
+Before constructing a DiffBind object, the workflow filters every original
+broad/narrow peak file to canonical autosomes and X/Y and removes intervals
+overlapping the configured blacklist. It preserves the original peak columns,
+writes the filtered files under `prefiltered_peaks/`, and records input,
+retained, noncanonical-removed and blacklist-removed counts in
+`diffbind_peak_prefilter_manifest.tsv`. DiffBind then calls
+`dba.count(minOverlap=2, summits=...)` with every valid biological sample using
+only these filtered inputs. The resulting consensus is checked again against
+the same canonical/blacklist policy. DiffBind recounts only model-eligible
+samples on that fixed, already recentered all-sample consensus with
+`summits=FALSE` and `filter=0`. This keeps
 singleton-condition samples in consensus construction without putting them in
 the statistical model. Explicit `~Condition` contrasts are added for every
 eligible pair and one DESeq2-backed DiffBind analysis is run per peak type.
@@ -66,6 +72,9 @@ DiffBind outputs remain under:
 diffbind/
 diffbind_results/<diffbind_samplesheet>/
 |-- diffbind_consensus_peaks.bed
+|-- diffbind_peak_prefilter_manifest.tsv
+|-- diffbind_samplesheet_prefiltered.csv
+|-- prefiltered_peaks/
 |-- differential_accessibility_condition_eligibility.tsv
 |-- differential_accessibility_comparisons.tsv
 `-- comparisons/<comparison_id>/

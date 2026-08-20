@@ -220,6 +220,13 @@ significant, higher-in-numerator and higher-in-reference counts for every
 method, peak type and condition pair. Counts are not deduplicated loci and should
 not be added across methods or peak types.
 
+The unified MultiQC report excludes MultiQC's native deepTools parser because
+MultiQC 1.35 can reject `plotPCA` auxiliary tables and overwrite repeated sample
+names. The authoritative deepTools tables remain under `qc_post_alignment/`;
+their already-rendered PCA, correlation, fingerprint and peak-signal PNGs are
+embedded in MultiQC as self-contained custom-content sections. The adjacent
+`*.multiqc.log` is checked for caught module, validation and colour failures.
+
 ---
 
 [← Pipeline steps](06_pipeline_steps.md) | [Next: DiffBind →](08_diffbind.md)

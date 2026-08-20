@@ -2,10 +2,11 @@
 
 **Snapshot:** ATACseq2tracks 4.0.0 release candidate
 
-**Update date:** 2026-08-19
+**Update date:** 2026-08-20
 
 **Scope:** Universal multi-condition differential accessibility, pair summaries,
-and GTF/cCRE annotation, retaining dual broad/narrow analysis
+GTF/cCRE annotation, bounded parallelism, stable MultiQC reporting and an
+identical canonical/blacklist universe from the first DiffBind count
 
 The public workflow version is **4.0.0**. This major-version promotion clearly
 identifies the cumulative multi-condition, annotation, normalization,
@@ -20,6 +21,9 @@ The universal implementation details and validation handoff remain in
 
 The bounded-parallelism implementation and server deployment notes are in
 [`docs/v4.0.0_RELEASE_2026-08-19.md`](docs/v4.0.0_RELEASE_2026-08-19.md).
+
+The current reporting and DiffBind input-filtering correction is documented in
+[`docs/v4.0.0_REPORTING_DIFFBIND_HOTFIX_2026-08-20.md`](docs/v4.0.0_REPORTING_DIFFBIND_HOTFIX_2026-08-20.md).
 
 ## Universal comparison extension (2026-08-18)
 
