@@ -1,16 +1,15 @@
-<p align="center">
-  <img src="assets/ATAC-seq_logo.png" width="220" alt="ATACseq2tracks logo"/>
-</p>
-
-<table>
+<table width="100%">
 <tr>
-<td width="82%">
+<td width="15%" align="left">
+<img src="assets/ATAC-seq_logo_transp.png" width="110" alt="ATACseq2tracks logo"/>
+</td>
+<td width="70%" align="center">
 
 # ATACseq2tracks 4.2.0
 
 </td>
-<td width="18%" align="center">
-<img src="assets/lab_logo.jpg" width="100" alt="Lab logo"/>
+<td width="15%" align="right">
+<img src="assets/lab_logo_transp.png" width="110" alt="Lab logo"/>
 </td>
 </tr>
 </table>
