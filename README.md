@@ -1,7 +1,7 @@
 <table width="100%">
 <tr>
 <td width="15%" align="left">
-<img src="assets/ATAC-seq_logo_transp.png" width="110" alt="ATACseq2tracks logo"/>
+<img src="assets/ATAC-seq_logo.png" width="110" alt="ATACseq2tracks logo"/>
 </td>
 <td width="70%" align="center">
 
@@ -9,7 +9,7 @@
 
 </td>
 <td width="15%" align="right">
-<img src="assets/lab_logo_transp.png" width="110" alt="Lab logo"/>
+<img src="assets/lab_logo.jpg" width="110" alt="Lab logo"/>
 </td>
 </tr>
 </table>
