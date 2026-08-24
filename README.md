@@ -1,18 +1,3 @@
-<table width="100%">
-<tr>
-<td width="15%" align="left">
-<img src="assets/ATAC-seq_logo.png" width="110" alt="ATACseq2tracks logo"/>
-</td>
-<td width="70%" align="center">
-
-# ATACseq2tracks 4.2.0
-
-</td>
-<td width="15%" align="right">
-<img src="assets/lab_logo.jpg" width="110" alt="Lab logo"/>
-</td>
-</tr>
-</table>
 
 ATACseq2tracks is a samplesheet-driven Bash workflow for bulk ATAC-seq and related chromatin-profiling assays. Version 4.2.0 adds an independently configurable Drosophila dm6 spike-in calibration branch to the cumulative v4.1.0 filtering-policy release. It retains the Bash architecture; it does not introduce Nextflow or Snakemake.
 
