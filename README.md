@@ -1,7 +1,7 @@
 <img src="assets/ATAC-seq_logo.png" width="140" align="left" alt="ATACseq2tracks logo"/>
 <img src="assets/lab_logo.jpg" width="140" align="right" alt="Lab logo"/>
 
-<h1 align="center">ATACseq2tracks 4.2.0</h1>
+<p align="center"><strong><font size="+3">ATACseq2tracks 4.2.0</font></strong></p>
 
 <br clear="both"/>
 
