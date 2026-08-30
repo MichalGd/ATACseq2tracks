@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LAUNCHER_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+[[ -n "$LAUNCHER_PATH" && -f "$LAUNCHER_PATH" ]] || {
+    echo "ERROR: cannot resolve launcher path: ${BASH_SOURCE[0]}" >&2
+    exit 1
+}
+INSTALL_DIR="$(cd "$(dirname "$LAUNCHER_PATH")/.." && pwd -P)"
 MAIN_ENV="${ATACSEQ2TRACKS_MAIN_ENV:-/opt/miniconda/envs/ATACseq2tracks}"
 ATAQV_ENV="${ATACSEQ2TRACKS_ATAQV_ENV:-/opt/miniconda/envs/ataqv-tools}"
 

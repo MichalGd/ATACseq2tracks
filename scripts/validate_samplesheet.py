@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ATACseq2tracks v4.3.0 - sample sheet validator
+ATACseq2tracks v4.3.2 - sample sheet validator
 Usage: python3 scripts/validate_samplesheet.py [--check-files] samplesheet.csv
 
 Schema changes:
@@ -61,7 +61,7 @@ def detect_schema(fieldnames):
     if "chipqc_annotation" in fieldnames:
         return REQUIRED_COLS_V30, CONSISTENT_COLS_V30, "v3.0.x (18-column, chipqc_annotation present — accepted, ignored by pipeline)"
     suffix = "; dm6 spike-in columns present" if all(c in fieldnames for c in SPIKEIN_COLS) else ""
-    return REQUIRED_COLS_V31, CONSISTENT_COLS_V31, f"v4.3.0 (17-column core; compatible with v3.1.0{suffix})"
+    return REQUIRED_COLS_V31, CONSISTENT_COLS_V31, f"v4.3.2 (17-column core; compatible with v3.1.0{suffix})"
 
 
 def main():

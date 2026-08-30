@@ -16,7 +16,7 @@ assert_grep() {
 }
 
 case "$(tr -d '[:space:]' < "${REPO_DIR}/VERSION")" in
-    4.2.0|4.3.0) ;;
+    4.2.0|4.3.0|4.3.1|4.3.2) ;;
     *) echo 'FAIL VERSION does not preserve the v4.1.0+ coverage-policy contract' >&2; exit 1 ;;
 esac
 echo 'OK   current release preserves v4.1.0 coverage-policy contract'

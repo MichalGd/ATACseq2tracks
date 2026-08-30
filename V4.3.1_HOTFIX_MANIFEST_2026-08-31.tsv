@@ -1,0 +1,13 @@
+path	status	purpose
+VERSION	modified	Release version 4.3.1
+scripts/deseq2atac_analysis.R	modified	Dimension-safe deterministic synthetic self-test
+tests/test_v4_3_0_operational.sh	modified	Expect the v4.3.1 launcher version
+tests/test_v4_1_0_coverage_policies.sh	modified	Accept v4.3.1 as preserving the coverage-policy contract
+README.md	modified	Current release and test-only scope
+CHANGELOG.md	modified	Hotfix release notes
+docs/README.md	modified	Current release and hotfix-document link
+config/README.txt	modified	Current configuration release label
+scripts/validate_samplesheet.py	modified	Current schema display label
+docs/v4.3.1_DESEQ2ATAC_SELF_TEST_HOTFIX_2026-08-31.md	added	Cause, correction and compatibility
+APPLY_V4.3.1_DESEQ2ATAC_SELF_TEST_HOTFIX_2026-08-31.md	added	Validation and shared-install instructions
+V4.3.1_HOTFIX_MANIFEST_2026-08-31.tsv	added	Focused change inventory

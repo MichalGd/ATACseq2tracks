@@ -1,6 +1,6 @@
 # ATACseq2tracks documentation
 
-Current prepared version: **4.3.0**.
+Current prepared version: **4.3.2**.
 
 | Page | Contents |
 |---|---|
@@ -23,6 +23,8 @@ Current prepared version: **4.3.0**.
 | [17 — Operations and recovery](17_operations_and_recovery.md) | Shared launcher, plan/preflight, named recovery, metadata, report regeneration and cleanup audit |
 | [18 — Technical replicate audit](18_technical_replicates.md) | Exact merge semantics, persistent audit files and design limitations |
 | [19 — Validation and reference provenance](19_validation_and_reference_provenance.md) | PE/SE/spike-in/replicate test matrix and provenance boundaries |
+| [v4.3.2 launcher symlink hotfix](v4.3.2_LAUNCHER_SYMLINK_HOTFIX_2026-08-31.md) | Activation-free shared-command path correction; scientific analysis unchanged |
+| [v4.3.1 DESeq2ATAC self-test hotfix](v4.3.1_DESEQ2ATAC_SELF_TEST_HOTFIX_2026-08-31.md) | Release-blocking synthetic-test correction; production analysis unchanged |
 | [v4.3.0 operational update](v4.3.0_OPERATIONAL_UPDATE_2026-08-30.md) | Narrow operational scope, compatibility, testing and deployment |
 | [v4.0.0 release](v4.0.0_RELEASE_2026-08-19.md) | Current release scope, configurable parallelism and validation |
 | [v4.0.0 reporting/DiffBind hotfix](v4.0.0_REPORTING_DIFFBIND_HOTFIX_2026-08-20.md) | Canonical pre-count peak filtering and stable MultiQC deepTools presentation |

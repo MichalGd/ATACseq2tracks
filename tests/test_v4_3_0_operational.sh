@@ -54,7 +54,10 @@ grep -Fq 'before_trim' "$TMP_ROOT/output/metadata/technical_merge_audit.tsv"
 echo "OK   technical lanes map to one biological library before trimming"
 
 bash "$REPO_DIR/atacseq2tracks.sh" --help | grep -Fq -- '--preflight-only'
-bash "$REPO_DIR/bin/atacseq2tracks" --version | grep -Fxq '4.3.0'
+bash "$REPO_DIR/bin/atacseq2tracks" --version | grep -Fxq '4.3.2'
+ln -s "$REPO_DIR/bin/atacseq2tracks" "$TMP_ROOT/atacseq2tracks"
+"$TMP_ROOT/atacseq2tracks" --version | grep -Fxq '4.3.2'
+echo "OK   activation-free launcher resolves an external command symlink"
 bash "$REPO_DIR/utilities/regenerate_reports.sh" --help | grep -Fq 'Regenerates reports only'
 echo "OK   activation-free launcher and operational interfaces are exposed"
 
