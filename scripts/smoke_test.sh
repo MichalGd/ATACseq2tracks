@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# ATACseq2tracks v4.2.0 - pre-flight validation
+# ATACseq2tracks pre-flight validation
 set -euo pipefail
 
 SAMPLESHEET_ARG="${1:?ERROR: pass samplesheet.csv as argument 1}"
 CONFIG="${2:?ERROR: pass config.conf as argument 2}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PIPELINE_VERSION="$(tr -d '[:space:]' < "${SCRIPT_DIR}/../VERSION" 2>/dev/null || echo unknown)"
 INPUT_SANITIZER="${SCRIPT_DIR}/sanitize_text_inputs.py"
 PASS=0
 FAIL=0
@@ -23,6 +24,15 @@ command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 is required to vali
 python3 "$INPUT_SANITIZER" "$CONFIG"
 # shellcheck disable=SC1090
 source "$CONFIG"
+if [[ "${TOTAL_CPU_BUDGET:-0}" =~ ^[0-9]+$ ]]; then
+    ok "TOTAL_CPU_BUDGET: ${TOTAL_CPU_BUDGET:-0}"
+else
+    fail "TOTAL_CPU_BUDGET must be a non-negative integer"
+fi
+case "${RESOURCE_CHECK_MODE:-warn}" in
+    warn|error|off) ok "RESOURCE_CHECK_MODE: ${RESOURCE_CHECK_MODE:-warn}" ;;
+    *) fail "RESOURCE_CHECK_MODE must be warn, error or off" ;;
+esac
 for setting_value in \
     "QC_SAMPLE_PARALLEL_JOBS=${QC_SAMPLE_PARALLEL_JOBS:-4}" \
     "ATAQV_PARALLEL_JOBS=${ATAQV_PARALLEL_JOBS:-4}" \
@@ -196,7 +206,7 @@ with open(sys.argv[1], newline="") as handle:
 PY
     )
     if (( ${#USED_GENOMES[@]} > 1 )); then
-        fail "multiple genome builds in one run (${USED_GENOMES[*]}); v4.2.0 requires one build per run"
+        fail "multiple genome builds in one run (${USED_GENOMES[*]}); v${VERSION} requires one build per run"
     elif (( ${#USED_GENOMES[@]} == 1 )); then
         ok "single genome build: ${USED_GENOMES[0]}"
     fi
@@ -338,7 +348,7 @@ SE_MODE="${SE_SIGNAL_MODE:-read}"
 if [[ "${SE_MODE,,}" == "read" ]]; then
     ok "single-end signal mode: read"
 else
-    fail "unsupported SE_SIGNAL_MODE=${SE_MODE}; v4.2.0 supports read only"
+    fail "unsupported SE_SIGNAL_MODE=${SE_MODE}; v${VERSION} supports read only"
 fi
 
 if [[ "${TRACK_STANDARD_CHROMS_ONLY:-true}" == "true" ]]; then

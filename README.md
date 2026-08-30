@@ -1,16 +1,14 @@
-<img src="assets/ATAC-seq_logo.png" width="140" align="left" alt="ATACseq2tracks logo"/>
-<img src="assets/lab_logo.jpg" width="140" align="right" alt="Lab logo"/>
+# ATACseq2tracks 4.3.0
 
-<p align="center"><strong><font size="+3">ATACseq2tracks 4.2.0</font></strong></p>
+ATACseq2tracks is a samplesheet-driven Bash workflow for bulk ATAC-seq and related chromatin-profiling assays. Version 4.3.0 is an operational update to v4.2.0: it adds an activation-free shared launcher, safe configuration parsing, explicit plan/preflight modes, named recovery, persistent technical-replicate and provenance metadata, report-only regeneration and audited cleanup. The v4.2.0 scientific methods and outputs are unchanged. It retains the Bash architecture; it does not introduce Nextflow or Snakemake.
 
-<br clear="both"/>
-
-ATACseq2tracks is a samplesheet-driven Bash workflow for bulk ATAC-seq and related chromatin-profiling assays. Version 4.2.0 adds an independently configurable Drosophila dm6 spike-in calibration branch to the cumulative v4.1.0 filtering-policy release. It retains the Bash architecture; it does not introduce Nextflow or Snakemake.
-
-> Status: release candidate. All inherited v4.1.0 outputs remain enabled and unchanged. The new v4.2.0 spike-in family is off by default and requires representative paired-end and single-end server validation before biological interpretation. See [the v4.2.0 update note](docs/v4.2.0_DROSOPHILA_SPIKEIN_UPDATE_2026-08-20.md).
+> The inherited dm6 spike-in family remains off by default and requires representative paired-end and single-end server validation before biological interpretation. See the [v4.3.0 operational update](docs/v4.3.0_OPERATIONAL_UPDATE_2026-08-30.md) and [v4.2.0 spike-in note](docs/v4.2.0_DROSOPHILA_SPIKEIN_UPDATE_2026-08-20.md).
 
 ## Principal capabilities
 
+- activation-free shared launch with safe literal-only configuration parsing;
+- plan/preflight-only modes, named recovery boundaries and signed checkpoints;
+- technical-replicate merge, software/reference, timing and cleanup audit tables;
 - raw and trimmed FASTQ quality control with FastQC and MultiQC;
 - Trim Galore adapter trimming for paired-end and single-end libraries;
 - Bowtie2 alignment with per-sample logs, `flagstat`, and `samtools stats`;
@@ -136,6 +134,10 @@ It also reports NFR/mononucleosome ratio, periodic-fragment fraction, local mono
 
 ## Repository layout
 
+The v4.3.0 operational additions are `bin/atacseq2tracks`,
+`scripts/{resolve_config.py,prepare_run_metadata.py,capture_provenance.sh,cleanup_intermediates.sh}`,
+and `utilities/{install_shared_release.sh,regenerate_reports.sh}`.
+
 ```text
 ATACseq2tracks/
 ├── atacseq2tracks.sh              main entry point
@@ -157,6 +159,22 @@ ATACseq2tracks/
 
 ## Quick start
 
+On a shared server installation, users do not activate Conda and do not need to
+locate the repository. The configuration is the only command-line input and
+contains the absolute `SAMPLESHEET` path:
+
+```bash
+atacseq2tracks --config /absolute/path/project/config/config.conf --plan
+atacseq2tracks --config /absolute/path/project/config/config.conf --preflight-only
+
+nohup atacseq2tracks --config /absolute/path/project/config/config.conf \
+  > /absolute/path/project/atacseq2tracks.log 2>&1 &
+echo $! > /absolute/path/project/atacseq2tracks.pid
+```
+
+Use `--from-stage peaks` or `--stop-after qc` for named recovery boundaries.
+See [Running](docs/05_running.md). For a private/local installation:
+
 ```bash
 git clone https://github.com/MichalGd/ATACseq2tracks.git
 cd ATACseq2tracks
@@ -176,7 +194,7 @@ bash scripts/smoke_test.sh \
     /path/to/project/config/samplesheet.csv \
     /path/to/project/config/config.conf
 
-bash atacseq2tracks.sh \
+bin/atacseq2tracks \
     --config /path/to/project/config/config.conf
 ```
 

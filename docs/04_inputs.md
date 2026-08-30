@@ -64,6 +64,10 @@ is disabled.
 - Add one row per sequencing run with the same `sample_id`, `replicate`, and different
   `tech_replicate` (1, 2, …).
 - The pipeline merges their FASTQs before trimming.
+- v4.3.0 writes the exact ordered merge mapping to
+  `metadata/technical_merge_audit.tsv`; review it during `--plan`.
+- Technical rows contribute one downstream biological library and must never be
+  used to inflate biological replicate counts.
 
 **Sequencing layout**
 - Use a PE-only or SE-only samplesheet; mixed PE/SE runs are rejected during validation.

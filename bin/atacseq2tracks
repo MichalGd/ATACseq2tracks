@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+MAIN_ENV="${ATACSEQ2TRACKS_MAIN_ENV:-/opt/miniconda/envs/ATACseq2tracks}"
+ATAQV_ENV="${ATACSEQ2TRACKS_ATAQV_ENV:-/opt/miniconda/envs/ataqv-tools}"
+
+unset PYTHONHOME PYTHONPATH R_HOME R_LIBS R_LIBS_USER
+path_parts=()
+[[ -d "${MAIN_ENV}/bin" ]] && path_parts+=("${MAIN_ENV}/bin")
+[[ -d "${ATAQV_ENV}/bin" ]] && path_parts+=("${ATAQV_ENV}/bin")
+path_parts+=("/usr/local/bin" "/usr/bin" "/bin")
+export PATH="$(IFS=:; echo "${path_parts[*]}")"
+
+exec bash "${INSTALL_DIR}/atacseq2tracks.sh" "$@"

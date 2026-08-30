@@ -1,4 +1,16 @@
-# ATACseq2tracks v4.2.0 release update
+# ATACseq2tracks v4.3.0 operational release update
+
+**Snapshot:** activation-free shared operation, auditable technical replicates,
+safe configuration, named recovery and provenance
+
+**Update date:** 2026-08-30
+
+Version 4.3.0 preserves the v4.2.0 scientific workflow and adds only operational
+capabilities. See
+[`docs/v4.3.0_OPERATIONAL_UPDATE_2026-08-30.md`](docs/v4.3.0_OPERATIONAL_UPDATE_2026-08-30.md)
+and [`docs/17_operations_and_recovery.md`](docs/17_operations_and_recovery.md).
+
+## Inherited v4.2.0 release notes
 
 **Snapshot:** ATACseq2tracks 4.2.0 optional Drosophila spike-in release candidate
 

@@ -2,8 +2,7 @@
 # Example only. Edit paths before running.
 set -euo pipefail
 
-RESULTS=/data/project/ATACseq2tracks_human
+CONFIG="/data/project/human/config/config.conf"
 
-../scripts/generate_pipeline_report.1.0.sh   "$RESULTS"   "pipeline_report_$(date +%Y%m%d)"   html
-
-../scripts/generate_multiqc_unified_report.1.0.sh   "$RESULTS"   "$RESULTS/reports/multiqc_summary_$(date +%Y%m%d)"   selfcontained
+/opt/bioinformatics/workflows/ATACseq2tracks/current/utilities/regenerate_reports.sh \
+    --config "$CONFIG"

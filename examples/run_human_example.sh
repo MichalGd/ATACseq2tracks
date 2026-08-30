@@ -2,9 +2,9 @@
 # Example only. Edit paths before running.
 set -euo pipefail
 
-INPUT=/data/project/raw_fastq_human
-OUTPUT=/data/project/ATACseq2tracks_human
-MAX_JOBS=4
-SPECIES=human
+CONFIG="/data/project/human/config/config.conf"
+LOG="/data/project/human/atacseq2tracks.log"
 
-../atacseq2tracks.sh "$INPUT" "$OUTPUT" "$MAX_JOBS" "$SPECIES"
+atacseq2tracks --config "$CONFIG" --preflight-only
+nohup atacseq2tracks --config "$CONFIG" > "$LOG" 2>&1 &
+echo "$!" > /data/project/human/atacseq2tracks.pid

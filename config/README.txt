@@ -1,4 +1,14 @@
-ATACseq2tracks v4.2.0 configuration directory
+ATACseq2tracks v4.3.0 configuration directory
+
+For the shared installation, copy config.conf into a user-owned project folder,
+set SAMPLESHEET and OUTPUT_DIR plus server references, then run:
+
+  atacseq2tracks --config /absolute/path/project/config/config.conf --plan
+  atacseq2tracks --config /absolute/path/project/config/config.conf --preflight-only
+  atacseq2tracks --config /absolute/path/project/config/config.conf
+
+The configuration is parsed as literal data. Do not use shell variables,
+command substitutions, pipes or custom undocumented keys.
 ================================================
 
 Files

@@ -6,20 +6,17 @@
 
 ## Before you run
 
-1. Conda environment activated: `conda activate ATACseq2tracks`
-2. Samplesheet validated: `python3 scripts/validate_samplesheet.py samplesheet.csv`
-3. Config file edited with correct paths
-4. Working directory = **parent folder of `ATACseq2tracks/`**, not inside it
+1. Shared command available: `command -v atacseq2tracks`
+2. Config file edited with correct paths, including `SAMPLESHEET`
+3. Plan reviewed: `atacseq2tracks --config /path/config.conf --plan`
+4. Preflight passed: `atacseq2tracks --config /path/config.conf --preflight-only`
 
 ---
 
 ## Full pipeline run
 
 ```bash
-cd /path/to/parent_of_ATACseq2tracks
-
-nohup bash ATACseq2tracks/atacseq2tracks.sh \
-    --config /path/to/my_project/config/config.conf \
+nohup atacseq2tracks --config /path/to/my_project/config/config.conf \
     > /path/to/my_project/run.log 2>&1 &
 
 # Save PID for later monitoring or kill
@@ -69,8 +66,7 @@ Any step that had not yet written its `.done` file will be repeated on resume.
 
 ```bash
 # Just re-run the same command — completed steps are skipped automatically
-nohup bash ATACseq2tracks/atacseq2tracks.sh \
-    --config /path/to/my_project/config/config.conf \
+nohup atacseq2tracks --config /path/to/my_project/config/config.conf \
     >> /path/to/my_project/run_resume.log 2>&1 &
 ```
 
@@ -78,14 +74,13 @@ nohup bash ATACseq2tracks/atacseq2tracks.sh \
 
 ## Rerunning individual steps
 
-Delete the checkpoint file for that step and rerun:
+Prefer a named recovery boundary. It reruns the named stage and all later stages
+while requiring matching checkpoints for earlier stages:
 
 ```bash
-# Rerun step 9 (MACS2) only
-rm /path/to/my_project/analysis/.checkpoints/step9.done
-
-nohup bash ATACseq2tracks/atacseq2tracks.sh \
+nohup atacseq2tracks \
     --config /path/to/my_project/config/config.conf \
+    --from-stage peaks \
     >> /path/to/my_project/run_rerun.log 2>&1 &
 ```
 
@@ -132,8 +127,7 @@ mkdir -p /path/to/project_B/config
 cp config/config.conf /path/to/project_B/config/config.conf
 # Edit config_B with different SAMPLESHEET and OUTPUT_DIR
 
-nohup bash ATACseq2tracks/atacseq2tracks.sh \
-    --config /path/to/project_B/config/config.conf \
+nohup atacseq2tracks --config /path/to/project_B/config/config.conf \
     > /path/to/project_B/run.log 2>&1 &
 ```
 
@@ -145,11 +139,11 @@ The same workflow installation handles both layouts, but they are separate analy
 
 ```bash
 # Paired-end project
-bash ATACseq2tracks/atacseq2tracks.sh \
+atacseq2tracks \
   --config /path/to/project_PE/config/config.conf
 
 # Single-end project; config contains SE_SIGNAL_MODE="read"
-bash ATACseq2tracks/atacseq2tracks.sh \
+atacseq2tracks \
   --config /path/to/project_SE/config/config.conf
 ```
 

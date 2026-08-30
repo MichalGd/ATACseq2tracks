@@ -1,0 +1,37 @@
+path	status	purpose
+.gitattributes	modified	Enforce LF endings for executable and configuration text files
+VERSION	modified	Release version 4.3.0
+atacseq2tracks.sh	modified	Safe config, plan/preflight, named recovery, metadata, signatures and cleanup integration
+fastq2tracks.sh	modified	Compatibility entry point kept byte-identical
+bin/atacseq2tracks	added	Activation-free repository-relative launcher
+config/config.conf	modified	Operational CPU guard and inert legacy activation key
+config/config_temp.conf.template	modified	Matching operational template
+config/README.txt	modified	Shared-command configuration instructions
+examples/run_human_example.sh	modified	Activation-free human launch example
+examples/run_mouse_example.sh	modified	Activation-free mouse launch example
+examples/run_reports_example.sh	modified	Report-only regeneration example
+scripts/resolve_config.py	added	Literal-only configuration parser
+scripts/prepare_run_metadata.py	added	Technical merge, plan and resource metadata
+scripts/capture_provenance.sh	added	Software and reference-path provenance
+scripts/cleanup_intermediates.sh	added	Exact success-only deletion audit
+scripts/smoke_test.sh	modified	Operational-setting and version validation
+scripts/validate_samplesheet.py	modified	v4.3.0 schema label; validation semantics unchanged
+utilities/regenerate_reports.sh	added	Independent report regeneration
+utilities/install_shared_release.sh	added	Validated immutable all-user deployment
+tests/test_v4_3_0_operational.sh	added	Focused operational regression tests
+tests/check_bash_syntax.sh	modified	Run launcher and v4.3.0 tests
+README.md	modified	Activation-free quick start and release scope
+docs/README.md	modified	v4.3.0 documentation index
+docs/01_overview.md	modified	Safe-config operational overview
+docs/02_quickstart.md	modified	Shared plan/preflight/run examples
+docs/03_installation.md	modified	Shared versus local installation
+docs/04_inputs.md	modified	Technical-replicate audit guidance
+docs/05_running.md	modified	Activation-free launch and named recovery
+docs/07_outputs.md	modified	Operational metadata outputs
+docs/17_operations_and_recovery.md	added	Operational interfaces and limitations
+docs/18_technical_replicates.md	added	Technical replicate semantics and audit
+docs/19_validation_and_reference_provenance.md	added	Validation matrix and provenance limits
+docs/v4.3.0_OPERATIONAL_UPDATE_2026-08-30.md	added	Release scope and compatibility
+APPLY_V4.3.0_OPERATIONAL_UPDATE_2026-08-30.md	added	Shared deployment and rollback guide
+CHANGELOG.md	modified	v4.3.0 release notes
+update.md	modified	Current release summary

@@ -2,7 +2,7 @@
 
 [← Index](README.md) | [Next: Quick start →](02_quickstart.md)
 
-ATACseq2tracks 4.2.0 is a modular, checkpoint-resumable Bash workflow for bulk ATAC-seq and related chromatin-profiling assays. One CSV samplesheet describes the libraries and one sourced configuration file defines run paths, references, tools and resource limits. An opt-in branch can competitively align host+dm6 reads and generate externally calibrated stringent host tracks.
+ATACseq2tracks 4.3.0 is a modular, checkpoint-resumable Bash workflow for bulk ATAC-seq and related chromatin-profiling assays. One CSV samplesheet describes the libraries and one safely parsed configuration file defines run paths, references, tools and resource limits. An opt-in branch can competitively align host+dm6 reads and generate externally calibrated stringent host tracks. The v4.3.0 operational layer does not alter the v4.2.0 scientific processing.
 
 ## Main outputs
 

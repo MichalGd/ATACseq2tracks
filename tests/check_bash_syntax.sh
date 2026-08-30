@@ -3,7 +3,7 @@ set -u
 
 status=0
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-for script in atacseq2tracks.sh fastq2tracks.sh scripts/*.sh utilities/*.sh; do
+for script in atacseq2tracks.sh fastq2tracks.sh bin/* scripts/*.sh utilities/*.sh; do
   name=$(basename "$script")
   if [[ "$name" == "readme.2.1.sh" ]]; then
     echo "SKIP $script - change-log note, not runnable shell"
@@ -84,6 +84,13 @@ if bash tests/test_reporting_diffbind_hotfix.sh; then
   echo "OK   reporting and DiffBind prefilter hotfix checks"
 else
   echo "FAIL reporting and DiffBind prefilter hotfix checks"
+  status=1
+fi
+
+if PYTHON_BIN="$PYTHON_BIN" bash tests/test_v4_3_0_operational.sh; then
+  echo "OK   v4.3.0 operational regression checks"
+else
+  echo "FAIL v4.3.0 operational regression checks"
   status=1
 fi
 

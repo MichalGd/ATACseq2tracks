@@ -95,16 +95,37 @@ if ! multiqc "$OUT_DIR" "$CUSTOM_DIR" -o "$REPORT_DIR" -n "$REPORT_NAME" \
     exit 1
 fi
 
-if grep -Eiq "Oops! The .* MultiQC module broke|ValidationError|Error converting colou?r" \
-        "$MULTIQC_LOG"; then
-    echo "ERROR: MultiQC reported a module, validation or colour-conversion failure; inspect $MULTIQC_LOG" >&2
+if grep -Eiq "Oops! The .* MultiQC module broke|ValidationError" "$MULTIQC_LOG"; then
+    echo "ERROR: MultiQC reported a module or validation failure; inspect $MULTIQC_LOG" >&2
     exit 1
+fi
+
+# MultiQC 1.35 can log non-fatal mqc_colour errors while exporting plots when
+# built-in palettes contain comma-separated RGB triplets. MultiQC still writes
+# the HTML report and exported images. Accept only that precise known pattern;
+# continue to reject any other colour-conversion error.
+COLOUR_ERRORS="$(grep -Ei "Error converting colou?r" "$MULTIQC_LOG" || true)"
+if [[ -n "$COLOUR_ERRORS" ]]; then
+    UNKNOWN_COLOUR_ERRORS="$(printf '%s\n' "$COLOUR_ERRORS" | \
+        grep -Eiv "mqc_colour.*Error converting colou?r ['\"]?[0-9]{1,3},[0-9]{1,3},[0-9]{1,3}['\"]? to RGB" || true)"
+    if [[ -n "$UNKNOWN_COLOUR_ERRORS" ]]; then
+        echo "ERROR: MultiQC reported an unexpected colour-conversion failure; inspect $MULTIQC_LOG" >&2
+        exit 1
+    fi
+    echo "WARNING: MultiQC reported known non-fatal RGB-triplet export messages; exported plots will be validated" >&2
 fi
 
 [[ -s "${REPORT_DIR}/${REPORT_NAME}.html" ]] || {
     echo "ERROR: MultiQC did not create a non-empty report: ${REPORT_DIR}/${REPORT_NAME}.html" >&2
     exit 1
 }
+EXPORTED_PLOTS_DIR="${REPORT_DIR}/${REPORT_NAME}_plots"
+if ! find "$EXPORTED_PLOTS_DIR" -type f \
+        \( -name '*.png' -o -name '*.svg' -o -name '*.pdf' \) \
+        -size +0c -print -quit 2>/dev/null | grep -q .; then
+    echo "ERROR: MultiQC did not create non-empty exported report images: $EXPORTED_PLOTS_DIR" >&2
+    exit 1
+fi
 [[ -s "$DA_SUMMARY" && -s "$DA_HTML" ]] || {
     echo "ERROR: differential-accessibility summary output is missing or empty" >&2
     exit 1
