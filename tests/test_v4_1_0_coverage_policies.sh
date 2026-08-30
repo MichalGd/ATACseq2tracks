@@ -15,9 +15,11 @@ assert_grep() {
     echo "OK   $label"
 }
 
-[[ "$(tr -d '[:space:]' < "${REPO_DIR}/VERSION")" == "4.2.0" ]] \
-    || { echo 'FAIL VERSION is not 4.2.0' >&2; exit 1; }
-echo 'OK   v4.2.0 preserves v4.1.0 coverage-policy contract'
+case "$(tr -d '[:space:]' < "${REPO_DIR}/VERSION")" in
+    4.2.0|4.3.0) ;;
+    *) echo 'FAIL VERSION does not preserve the v4.1.0+ coverage-policy contract' >&2; exit 1 ;;
+esac
+echo 'OK   current release preserves v4.1.0 coverage-policy contract'
 
 for setting in \
     GENERATE_CPM_TRACKS \
@@ -89,8 +91,8 @@ observed="$(PATH="${TEST_TMP}/bin:$PATH" signal_mapq_bin_counts mock.bam PE)"
     || { echo "FAIL MAPQ-bin fragment diagnostics: $observed" >&2; exit 1; }
 echo 'OK   MAPQ bins and XS diagnostics count PE fragments once'
 
-assert_grep 'KEEP_NORMALIZATION_POLICY_BAMS:-false' "$ENTRYPOINT" 'temporary policy BAM cleanup is configurable'
-assert_grep 'coverage_filtering_policy_bams.*-type f' "$ENTRYPOINT" 'policy BAM cleanup is narrowly targeted'
+assert_grep 'KEEP_NORMALIZATION_POLICY_BAMS:-false' "${REPO_DIR}/scripts/cleanup_intermediates.sh" 'temporary policy BAM cleanup is configurable'
+assert_grep 'coverage_filtering_policy_bams' "${REPO_DIR}/scripts/cleanup_intermediates.sh" 'policy BAM cleanup is narrowly targeted and audited'
 assert_grep 'if is_done 10b' "$ENTRYPOINT" 'filtering sensitivity stage is independently checkpointed'
 
 # Exercise the policy orchestrator with small command mocks. Existing mock

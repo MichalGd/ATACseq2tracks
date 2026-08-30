@@ -7,6 +7,12 @@
 This page gets you from zero to a running pipeline in five steps.
 For full details see [Installation](03_installation.md) and [Input files](04_inputs.md).
 
+> **Shared v4.3.0 installation:** users should skip the local Conda/repository
+> installation commands below. Run `atacseq2tracks --version`, copy templates
+> from `/opt/bioinformatics/workflows/ATACseq2tracks/current/config/`, then use
+> `atacseq2tracks --config /absolute/path/config.conf`. No environment activation
+> or workflow-directory argument is required.
+
 ---
 
 ## Step 1 — Install
@@ -82,12 +88,10 @@ python3 /path/to/ATACseq2tracks/scripts/validate_samplesheet.py \
 ## Step 5 — Run
 
 ```bash
-conda activate ATACseq2tracks
+atacseq2tracks --config /path/to/my_project/config/config.conf --plan
+atacseq2tracks --config /path/to/my_project/config/config.conf --preflight-only
 
-# Run from the PARENT folder of ATACseq2tracks/
-cd /path/to/parent_folder
-
-nohup bash ATACseq2tracks/atacseq2tracks.sh \
+nohup atacseq2tracks \
     --config /path/to/my_project/config/config.conf \
     > /path/to/my_project/run.log 2>&1 &
 
@@ -122,9 +126,9 @@ Check the log for the failed step, then:
 
 ```bash
 # Remove only the failed step's checkpoint and re-run
-rm /path/to/my_project/analysis/.checkpoints/step<N>.done
-nohup bash ATACseq2tracks/atacseq2tracks.sh \
+nohup atacseq2tracks \
     --config /path/to/my_project/config/config.conf \
+    --from-stage alignment \
     >> /path/to/my_project/run_resume.log 2>&1 &
 ```
 

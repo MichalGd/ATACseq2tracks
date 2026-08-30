@@ -1,46 +1,95 @@
 #!/bin/bash
 # =============================================================================
-# ATACseq2tracks v4.2.0
+# ATACseq2tracks v4.3.0
 # ATAC-seq / chromatin profiling track-generation and QC workflow
 #
-# Usage:
-#   bash /path/to/ATACseq2tracks/atacseq2tracks.sh --config /path/to/config.conf
+# Preferred usage after shared installation:
+#   atacseq2tracks --config /path/to/config.conf
 #
 # Checkpoint system: completed steps are skipped on re-run.
-# To force a step to re-run:
-#   rm /your/output/.checkpoints/stepN.done
-# To force ALL steps to re-run:
-#   rm -rf /your/output/.checkpoints/
+# To rerun a named stage and everything after it:
+#   atacseq2tracks --config /path/to/config.conf --from-stage peaks
 # =============================================================================
 set -euo pipefail
 
 INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_DIR="${INSTALL_DIR}/scripts"
 INPUT_SANITIZER="${SCRIPT_DIR}/sanitize_text_inputs.py"
+CONFIG_RESOLVER="${SCRIPT_DIR}/resolve_config.py"
+METADATA_WRITER="${SCRIPT_DIR}/prepare_run_metadata.py"
+USER_CONFIG=""
 F2T_CONFIG=""
-PIPELINE_VERSION="$(tr -d '[:space:]' < "${INSTALL_DIR}/VERSION" 2>/dev/null || echo 4.2.0)"
+PLAN_ONLY=false
+PREFLIGHT_ONLY=false
+FROM_STAGE=""
+STOP_AFTER=""
+PIPELINE_VERSION="$(tr -d '[:space:]' < "${INSTALL_DIR}/VERSION" 2>/dev/null || echo 4.3.0)"
+
+declare -A STAGE_STEPS=(
+    [fastqc_raw]=1 [trim]=2 [fastqc_trimmed]=3 [alignment]=4 [dedup]=5
+    [filtering]=6 [spikein]=6s [coverage]=7 [merged_tracks]=8 [peaks]=9
+    [qc]=10 [filtering_sensitivity]=10b [diffbind_prep]=11 [diffbind]=12
+    [deseq2atac]=12a [browser]=13 [report]=14
+)
+STAGE_ORDER=(fastqc_raw trim fastqc_trimmed alignment dedup filtering spikein coverage merged_tracks peaks qc filtering_sensitivity diffbind_prep diffbind deseq2atac browser report)
 
 usage() {
-    echo "Usage: bash atacseq2tracks.sh --config /absolute/path/to/config.conf"
-    exit 1
+    cat <<'EOF'
+Usage: atacseq2tracks --config /absolute/path/config.conf [options]
+
+Options:
+  --plan                 Validate inputs and write/print the execution plan only
+  --preflight-only       Run complete pre-flight validation, then exit
+  --from-stage NAME      Re-run NAME and every later stage
+  --stop-after NAME      Stop successfully after NAME completes
+  --version              Print the workflow version
+  -h, --help             Show this help
+
+Stage names: fastqc_raw, trim, fastqc_trimmed, alignment, dedup, filtering,
+spikein, coverage, merged_tracks, peaks, qc, filtering_sensitivity,
+diffbind_prep, diffbind, deseq2atac, browser, report.
+EOF
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --config)  F2T_CONFIG="$(realpath "$2")"; shift 2 ;;
-        -h|--help) usage ;;
-        *) echo "Unknown argument: $1" >&2; usage ;;
+        --config) USER_CONFIG="$(realpath "${2:?missing value for --config}")"; shift 2 ;;
+        --plan) PLAN_ONLY=true; shift ;;
+        --preflight-only) PREFLIGHT_ONLY=true; shift ;;
+        --from-stage) FROM_STAGE="${2:?missing value for --from-stage}"; shift 2 ;;
+        --stop-after) STOP_AFTER="${2:?missing value for --stop-after}"; shift 2 ;;
+        --version) echo "$PIPELINE_VERSION"; exit 0 ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
     esac
 done
 
-[[ -z "$F2T_CONFIG" ]] && { echo "ERROR: --config is required" >&2; usage; }
-[[ -f "$F2T_CONFIG" ]] || { echo "ERROR: config file not found: $F2T_CONFIG" >&2; exit 1; }
+[[ -n "$USER_CONFIG" ]] || { echo "ERROR: --config is required" >&2; usage >&2; exit 2; }
+[[ -f "$USER_CONFIG" ]] || { echo "ERROR: config file not found: $USER_CONFIG" >&2; exit 1; }
 [[ -f "$INPUT_SANITIZER" ]] || { echo "ERROR: input sanitizer not found: $INPUT_SANITIZER" >&2; exit 1; }
+[[ -f "$CONFIG_RESOLVER" ]] || { echo "ERROR: config resolver not found: $CONFIG_RESOLVER" >&2; exit 1; }
+[[ -f "$METADATA_WRITER" ]] || { echo "ERROR: metadata writer not found: $METADATA_WRITER" >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 is required to validate input text files" >&2; exit 1; }
+
+for requested_stage in "$FROM_STAGE" "$STOP_AFTER"; do
+    [[ -z "$requested_stage" || -n "${STAGE_STEPS[$requested_stage]:-}" ]] || {
+        echo "ERROR: unknown stage: $requested_stage" >&2
+        usage >&2
+        exit 2
+    }
+done
 
 # Normalize the config before Bash sources it. Affected files are backed up
 # beside the original; clean UTF-8/LF files are left byte-for-byte unchanged.
-python3 "$INPUT_SANITIZER" "$F2T_CONFIG"
+python3 "$INPUT_SANITIZER" "$USER_CONFIG"
+
+RUNTIME_DIR="$(mktemp -d "${TMPDIR:-/tmp}/atacseq2tracks-config.XXXXXX")"
+trap 'status=$?; rm -rf -- "$RUNTIME_DIR"; exit "$status"' EXIT
+python3 "$CONFIG_RESOLVER" \
+    --config "$USER_CONFIG" --template "${INSTALL_DIR}/config/config.conf" \
+    --shell-output "${RUNTIME_DIR}/resolved_config.conf" \
+    --tsv-output "${RUNTIME_DIR}/resolved_config.tsv"
+F2T_CONFIG="${RUNTIME_DIR}/resolved_config.conf"
 
 export F2T_CONFIG
 source "$F2T_CONFIG"
@@ -50,10 +99,43 @@ source "$F2T_CONFIG"
 [[ -f "$SAMPLESHEET"     ]] || { echo "ERROR: SAMPLESHEET not found: $SAMPLESHEET" >&2; exit 1; }
 python3 "$INPUT_SANITIZER" "$SAMPLESHEET"
 
+mkdir -p "${OUTPUT_DIR}/metadata"
+cp "${RUNTIME_DIR}/resolved_config.conf" "${OUTPUT_DIR}/metadata/resolved_config.conf"
+cp "${RUNTIME_DIR}/resolved_config.tsv" "${OUTPUT_DIR}/metadata/resolved_config.tsv"
+printf '%s\n' "$USER_CONFIG" > "${OUTPUT_DIR}/metadata/user_config_path.txt"
+python3 "${SCRIPT_DIR}/validate_samplesheet.py" "$SAMPLESHEET"
+python3 "$METADATA_WRITER" --samplesheet "$SAMPLESHEET" \
+    --resolved-config-tsv "${OUTPUT_DIR}/metadata/resolved_config.tsv" \
+    --output-dir "${OUTPUT_DIR}/metadata"
+
+RESOURCE_EXCESS="$(awk -F '\t' 'NR > 1 && $8 == "yes" {print $1 ":" $6}' "${OUTPUT_DIR}/metadata/resource_budget.tsv" | paste -sd, -)"
+if [[ -n "$RESOURCE_EXCESS" ]]; then
+    case "${RESOURCE_CHECK_MODE:-warn}" in
+        error) echo "ERROR: configured thread demand exceeds TOTAL_CPU_BUDGET: $RESOURCE_EXCESS" >&2; exit 1 ;;
+        warn) echo "WARNING: configured thread demand exceeds TOTAL_CPU_BUDGET: $RESOURCE_EXCESS" >&2 ;;
+        off) ;;
+        *) echo "ERROR: RESOURCE_CHECK_MODE must be warn, error or off" >&2; exit 1 ;;
+    esac
+fi
+
+export ATACSEQ2TRACKS_USER_CONFIG="$USER_CONFIG"
+
+if [[ "$PLAN_ONLY" == "true" ]]; then
+    echo "ATACseq2tracks v${PIPELINE_VERSION} execution plan"
+    echo "Config: $USER_CONFIG"
+    echo "Samplesheet: $SAMPLESHEET"
+    echo "Output: $OUTPUT_DIR"
+    column -t -s $'\t' "${OUTPUT_DIR}/metadata/planned_stages.tsv" 2>/dev/null || \
+        cat "${OUTPUT_DIR}/metadata/planned_stages.tsv"
+    echo "Technical-replicate audit: ${OUTPUT_DIR}/metadata/technical_merge_audit.tsv"
+    echo "Resource budget: ${OUTPUT_DIR}/metadata/resource_budget.tsv"
+    exit 0
+fi
+
 echo "============================================================"
 echo " ATACseq2tracks v${PIPELINE_VERSION}"
 echo " Install dir : $INSTALL_DIR"
-echo " Config      : $F2T_CONFIG"
+echo " Config      : $USER_CONFIG"
 echo " Samplesheet : $SAMPLESHEET"
 echo " Output      : $OUTPUT_DIR"
 echo " Max jobs    : ${THREADS_PARALLEL_JOBS}"
@@ -67,14 +149,92 @@ echo "============================================================"
 # ── Checkpoint helpers ────────────────────────────────────────────────────────
 CHECKPOINT_DIR="${OUTPUT_DIR}/.checkpoints"
 mkdir -p "$CHECKPOINT_DIR"
-RUN_SIGNATURE="$(sha256sum "$SAMPLESHEET" "$F2T_CONFIG" "${INSTALL_DIR}/VERSION" | sha256sum | awk '{print $1}')"
+WORKFLOW_SIGNATURE="$(find "$INSTALL_DIR" -maxdepth 2 -type f \
+    \( -name '*.sh' -o -name '*.py' -o -name '*.R' -o -name 'VERSION' \) \
+    -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')"
+RUN_SIGNATURE="$(sha256sum "$SAMPLESHEET" "$F2T_CONFIG" | { cat; printf '%s  workflow\n' "$WORKFLOW_SIGNATURE"; } | sha256sum | awk '{print $1}')"
+EVENT_LOG="${OUTPUT_DIR}/metadata/workflow_events.tsv"
+[[ -s "$EVENT_LOG" ]] || printf 'timestamp\tevent\tstep\tstage\tdetail\n' > "$EVENT_LOG"
+CURRENT_STEP="0"
+CURRENT_STAGE="initialization"
+STAGE_STARTED="$(date +%s)"
 
-is_done()   { [[ -f "${CHECKPOINT_DIR}/step${1}.done" ]] && [[ "$(cat "${CHECKPOINT_DIR}/step${1}.done")" == "$RUN_SIGNATURE" ]]; }
+stage_index() {
+    local target="$1" index
+    for index in "${!STAGE_ORDER[@]}"; do
+        [[ "${STAGE_ORDER[$index]}" == "$target" ]] && { echo "$index"; return 0; }
+    done
+    return 1
+}
+stage_for_step() {
+    local step="$1" stage
+    for stage in "${!STAGE_STEPS[@]}"; do
+        [[ "${STAGE_STEPS[$stage]}" == "$step" ]] && { echo "$stage"; return 0; }
+    done
+    echo "unknown"
+}
+log_event() {
+    printf '%s\t%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$2" "$3" "${4:-}" >> "$EVENT_LOG"
+}
+begin_stage() {
+    CURRENT_STEP="$1"; CURRENT_STAGE="$2"; STAGE_STARTED="$(date +%s)"
+    log_event start "$CURRENT_STEP" "$CURRENT_STAGE" ""
+    echo "=== [${CURRENT_STEP}] $3 ==="
+}
+on_exit() {
+    local status="$1"
+    if (( status != 0 )); then
+        log_event failure "$CURRENT_STEP" "$CURRENT_STAGE" "exit_status=${status}"
+    fi
+}
+trap 'status=$?; on_exit "$status"; rm -rf -- "$RUNTIME_DIR"; exit "$status"' EXIT
+log_event run_start 0 initialization "version=${PIPELINE_VERSION};signature=${RUN_SIGNATURE}"
+
+is_done() {
+    local step="$1" stage checkpoint_matches=false
+    stage="$(stage_for_step "$step")"
+    if [[ -f "${CHECKPOINT_DIR}/step${step}.done" ]] && [[ "$(cat "${CHECKPOINT_DIR}/step${step}.done")" == "$RUN_SIGNATURE" ]]; then
+        checkpoint_matches=true
+    fi
+    if [[ -n "$FROM_STAGE" ]]; then
+        if (( $(stage_index "$stage") < $(stage_index "$FROM_STAGE") )); then
+            [[ "$checkpoint_matches" == "true" ]] || {
+                echo "ERROR: --from-stage ${FROM_STAGE} requires a matching earlier checkpoint for ${stage}" >&2
+                exit 1
+            }
+            return 0
+        fi
+        return 1
+    fi
+    [[ "$checkpoint_matches" == "true" ]]
+}
 mark_done() {
     printf '%s\n' "$RUN_SIGNATURE" > "${CHECKPOINT_DIR}/step${1}.done"
-    echo "[CHECKPOINT] Step ${1} complete -- to re-run: rm ${CHECKPOINT_DIR}/step${1}.done"
+    local stage elapsed
+    stage="$(stage_for_step "$1")"
+    elapsed=$(( $(date +%s) - STAGE_STARTED ))
+    log_event complete "$1" "$stage" "elapsed_seconds=${elapsed}"
+    printf '{"step":"%s","stage":"%s","signature":"%s","completed_utc":"%s","elapsed_seconds":%s}\n' \
+        "$1" "$stage" "$RUN_SIGNATURE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$elapsed" \
+        > "${CHECKPOINT_DIR}/step${1}.json"
+    echo "[CHECKPOINT] Step ${1} (${stage}) complete -- to re-run: atacseq2tracks --config ${USER_CONFIG} --from-stage ${stage}"
+    if [[ "$STOP_AFTER" == "$stage" ]]; then
+        log_event stop_after "$1" "$stage" "requested"
+        echo "Requested stop after stage '${stage}'."
+        exit 0
+    fi
 }
-skip_msg()  { echo "=== [${1}] SKIPPED (already complete -- checkpoint exists) ==="; }
+skip_msg()  {
+    local stage
+    stage="$(stage_for_step "$1")"
+    log_event skip "$1" "$stage" checkpoint
+    echo "=== [${1}] ${stage} SKIPPED (matching checkpoint) ==="
+    if [[ "$STOP_AFTER" == "$stage" ]]; then
+        log_event stop_after "$1" "$stage" "matching_checkpoint"
+        echo "Requested stop boundary '${stage}' is already complete."
+        exit 0
+    fi
+}
 
 # ── Create output folders ─────────────────────────────────────────────────────
 mkdir -p \
@@ -116,17 +276,22 @@ mkdir -p \
     "${OUTPUT_DIR}/deseq2atac" \
     "${OUTPUT_DIR}/reports"
 
-[[ -n "${CONDA_ENV_ACTIVATE:-}" && -f "${CONDA_ENV_ACTIVATE}" ]] && source "${CONDA_ENV_ACTIVATE}"
-
 RAW_FASTQ_DIR=$(dirname "$(tail -n +2 "$SAMPLESHEET" | head -1 | cut -d',' -f2 | tr -d '"')")
 
 # ── Step 0: Pre-flight ────────────────────────────────────────────────────────
-echo "=== [0] Pre-flight checks ==="
+begin_stage 0 preflight "Pre-flight checks"
 bash "${SCRIPT_DIR}/smoke_test.sh" "$SAMPLESHEET" "$F2T_CONFIG"
+bash "${SCRIPT_DIR}/capture_provenance.sh" "${OUTPUT_DIR}/metadata" \
+    "${OUTPUT_DIR}/metadata/resolved_config.tsv"
+log_event complete 0 preflight ""
+if [[ "$PREFLIGHT_ONLY" == "true" ]]; then
+    echo "Pre-flight validation completed successfully; workflow stages were not launched."
+    exit 0
+fi
 
 # ── Step 1: FastQC raw ────────────────────────────────────────────────────────
 if is_done 1; then skip_msg 1; else
-    echo "=== [1] FastQC (raw) ==="
+    begin_stage 1 fastqc_raw "FastQC (raw)"
     bash "${SCRIPT_DIR}/fastqc_batch.sh" \
         "$RAW_FASTQ_DIR" "${OUTPUT_DIR}/fastQC/fastQC_unTrimmed" "${THREADS_PARALLEL_JOBS}" samplesheet
     multiqc "${OUTPUT_DIR}/fastQC/fastQC_unTrimmed" -n multiQC_unTrimmed \
@@ -136,7 +301,7 @@ fi
 
 # ── Step 2: TrimGalore ────────────────────────────────────────────────────────
 if is_done 2; then skip_msg 2; else
-    echo "=== [2] TrimGalore ==="
+    begin_stage 2 trim "TrimGalore"
     bash "${SCRIPT_DIR}/trimgalore_batch.sh" \
         "$SAMPLESHEET" "$RAW_FASTQ_DIR" "${OUTPUT_DIR}/trimmedFastq"
     mark_done 2
@@ -144,7 +309,7 @@ fi
 
 # ── Step 3: FastQC trimmed ────────────────────────────────────────────────────
 if is_done 3; then skip_msg 3; else
-    echo "=== [3] FastQC (trimmed) ==="
+    begin_stage 3 fastqc_trimmed "FastQC (trimmed)"
     bash "${SCRIPT_DIR}/fastqc_batch.sh" \
         "${OUTPUT_DIR}/trimmedFastq" "${OUTPUT_DIR}/fastQC/fastQC_trimmed" "${THREADS_PARALLEL_JOBS}" directory
     multiqc "${OUTPUT_DIR}/fastQC/fastQC_trimmed" -n multiQC_trimmed \
@@ -154,7 +319,7 @@ fi
 
 # ── Step 4: Alignment ─────────────────────────────────────────────────────────
 if is_done 4; then skip_msg 4; else
-    echo "=== [4] Bowtie2 alignment ==="
+    begin_stage 4 alignment "Bowtie2 alignment"
     bash "${SCRIPT_DIR}/bowtie2_batch.sh" \
         "$SAMPLESHEET" "${OUTPUT_DIR}/trimmedFastq" "${OUTPUT_DIR}/bams"
     multiqc "${OUTPUT_DIR}/bams" -n multiQC_alignments \
@@ -164,7 +329,7 @@ fi
 
 # ── Step 5: Deduplication ─────────────────────────────────────────────────────
 if is_done 5; then skip_msg 5; else
-    echo "=== [5] Picard deduplication ==="
+    begin_stage 5 dedup "Picard deduplication"
     bash "${SCRIPT_DIR}/picard_dedup_batch.sh" \
         "${OUTPUT_DIR}/bams" "${OUTPUT_DIR}/dedupBams" "${THREADS_PARALLEL_JOBS}"
     multiqc "${OUTPUT_DIR}/dedupBams" "${OUTPUT_DIR}/logs/picard" -n multiQC_deduplication \
@@ -174,7 +339,7 @@ fi
 
 # ── Step 6: Blacklist filtering ───────────────────────────────────────────────
 if is_done 6; then skip_msg 6; else
-    echo "=== [6] Blacklist filtering ==="
+    begin_stage 6 filtering "Blacklist filtering"
     bash "${SCRIPT_DIR}/blacklist_filter_batch.sh" \
         "$SAMPLESHEET" "${OUTPUT_DIR}/dedupBams" "${OUTPUT_DIR}/filteredBams"
     mark_done 6
@@ -184,7 +349,7 @@ fi
 # competitive host+dm6 composite alignment and creates only spike-in tracks.
 if [[ "${GENERATE_DROSOPHILA_SPIKEIN_STRINGENT_TRACKS:-false}" == "true" ]]; then
     if is_done 6s; then skip_msg 6s; else
-        echo "=== [6s] Drosophila spike-in stringent coverage ==="
+        begin_stage 6s spikein "Drosophila spike-in stringent coverage"
         bash "${SCRIPT_DIR}/drosophila_spikein_tracks.sh" \
             "$SAMPLESHEET" "${OUTPUT_DIR}/trimmedFastq" "$OUTPUT_DIR"
         mark_done 6s
@@ -195,8 +360,8 @@ fi
 
 # ── Step 7: Genome coverage ───────────────────────────────────────────────────
 if is_done 7; then skip_msg 7; else
+    begin_stage 7 coverage "Fragment/read CPM coverage (individual)"
     if [[ "${GENERATE_CPM_TRACKS:-true}" == "true" ]]; then
-        echo "=== [7] Fragment/read CPM coverage (individual) ==="
         bash "${SCRIPT_DIR}/genomecoverage_batch.sh" \
             "$SAMPLESHEET" "${OUTPUT_DIR}/filteredBams" "${OUTPUT_DIR}/bigwig"
     else
@@ -207,8 +372,8 @@ fi
 
 # ── Step 8: Replicate merging ─────────────────────────────────────────────────
 if is_done 8; then skip_msg 8; else
+    begin_stage 8 merged_tracks "Replicate merging + merged CPM tracks"
     if [[ "${GENERATE_CPM_TRACKS:-true}" == "true" ]]; then
-        echo "=== [8] Replicate merging + merged CPM tracks ==="
         for GENOME in hg38 mm39; do
             grep -q ",$GENOME," "$SAMPLESHEET" && \
                 bash "${SCRIPT_DIR}/merge_replicates.sh" \
@@ -222,14 +387,14 @@ fi
 
 # ── Step 9: MACS3 (legacy script name retained) ──────────────────────────────
 if is_done 9; then skip_msg 9; else
-    echo "=== [9] MACS3 peak calling (sample-sheet mode) ==="
+    begin_stage 9 peaks "MACS3 peak calling (sample-sheet mode)"
     bash "${SCRIPT_DIR}/macs2_batch.sh" \
         "$SAMPLESHEET" "${OUTPUT_DIR}/filteredBams" "${OUTPUT_DIR}/peaks"
     mark_done 9
 fi
 # ── Step 10: Post-alignment QC (deepTools — replaces ChIPQC) ─────────────────
 if is_done 10; then skip_msg 10; else
-    echo "=== [10] Post-alignment QC (deepTools) ==="
+    begin_stage 10 qc "Post-alignment QC (deepTools)"
     mkdir -p "${OUTPUT_DIR}/qc_post_alignment"
     bash "${SCRIPT_DIR}/post_alignment_qc_batch.sh" \
         "$SAMPLESHEET" \
@@ -257,7 +422,7 @@ fi
 if [[ "${GENERATE_DESEQ2_ROBUST_CPM_PERMISSIVE_TRACKS:-true}" == "true" || \
       "${GENERATE_DESEQ2_ROBUST_CPM_INTERMEDIATE_TRACKS:-true}" == "true" ]]; then
     if is_done 10b; then skip_msg 10b; else
-        echo "=== [10b] Read-filtering sensitivity robust-CPM tracks ==="
+        begin_stage 10b filtering_sensitivity "Read-filtering sensitivity robust-CPM tracks"
         bash "${SCRIPT_DIR}/generate_filtering_sensitivity_tracks.sh" \
             "$SAMPLESHEET" "$OUTPUT_DIR" \
             "${OUTPUT_DIR}/qc_post_alignment/peak_sets/consensus_peaks.bed"
@@ -269,7 +434,7 @@ fi
 
 # Step 11: DiffBind samplesheet preparation
 if is_done 11; then skip_msg 11; else
-    echo "=== [11] DiffBind samplesheet preparation ==="
+    begin_stage 11 diffbind_prep "DiffBind samplesheet preparation"
     for GENOME in hg38 mm39; do
         grep -q ",$GENOME," "$SAMPLESHEET" && \
             "${R_BIN}" "${SCRIPT_DIR}/prepare_diffbind.R" \
@@ -282,7 +447,7 @@ fi
 # ── Step 12: DiffBind differential analysis ──────────────────────────────────
 DIFFERENTIAL_ANALYSIS_FAILURES=0
 if is_done 12; then skip_msg 12; else
-    echo "=== [12] DiffBind differential analysis ==="
+    begin_stage 12 diffbind "DiffBind differential analysis"
     if bash "${SCRIPT_DIR}/diffbind_analysis.sh" \
         "${OUTPUT_DIR}/diffbind" "${OUTPUT_DIR}/diffbind_results"; then
         mark_done 12
@@ -296,7 +461,7 @@ fi
 # established Step 13/14 checkpoint names and resumes separately from DiffBind.
 if [[ "${RUN_DESEQ2ATAC:-true}" == "true" ]]; then
     if is_done 12a; then skip_msg 12a; else
-        echo "=== [12a] DESeq2ATAC differential accessibility analysis ==="
+        begin_stage 12a deseq2atac "DESeq2ATAC differential accessibility analysis"
         if bash "${SCRIPT_DIR}/deseq2atac_analysis.sh" \
             "$SAMPLESHEET" "${OUTPUT_DIR}/filteredBams" "${OUTPUT_DIR}/peaks" \
             "${OUTPUT_DIR}/deseq2atac"; then
@@ -317,7 +482,7 @@ fi
 
 # ── Step 13: UCSC tracks ──────────────────────────────────────────────────────
 if is_done 13; then skip_msg 13; else
-    echo "=== [13] UCSC tracks ==="
+    begin_stage 13 browser "UCSC tracks"
     if find "${OUTPUT_DIR}/bigwig" -maxdepth 1 -name '*.bw' -print -quit | grep -q .; then
         bash "${SCRIPT_DIR}/create_ucsc_tracks.sh" \
             "${OUTPUT_DIR}/bigwig" "${UCSC_BIGDATA_URL_BASE:-}" "${UCSC_TRACK_PREFIX:-ATAC-seq} CPM"
@@ -364,7 +529,7 @@ fi
 
 # ── Step 14: Report ───────────────────────────────────────────────────────────
 if is_done 14; then skip_msg 14; else
-    echo "=== [14] Pipeline report ==="
+    begin_stage 14 report "Pipeline report"
     bash "${SCRIPT_DIR}/generate_pipeline_report.sh" "$OUTPUT_DIR" \
         "${OUTPUT_DIR}/reports/pipeline_report_$(date +%Y%m%d)" html
     if (( DIFFERENTIAL_ANALYSIS_FAILURES == 0 )); then
@@ -382,23 +547,10 @@ fi
 
 # ── Cleanup ───────────────────────────────────────────────────────────────────
 if [[ "${ENABLE_AUTOMATIC_CLEANUP:-true}" == "true" ]]; then
-[[ "${KEEP_INTERMEDIATE_BAMS:-false}" == "false" ]] && \
-    rm -f "${OUTPUT_DIR}/bams/"*.bam "${OUTPUT_DIR}/bams/"*.bai 2>/dev/null || true
-[[ "${KEEP_TRIMMED_FASTQ:-false}" == "false" ]] && \
-    rm -f "${OUTPUT_DIR}/trimmedFastq/"*.gz 2>/dev/null || true
-[[ "${KEEP_DEDUP_BAMS:-false}" == "false" ]] && \
-    rm -f "${OUTPUT_DIR}/dedupBams/"*.bam "${OUTPUT_DIR}/dedupBams/"*.bai 2>/dev/null || true
-[[ "${KEEP_FILTERED_BAMS:-true}" == "false" ]] && \
-    rm -f "${OUTPUT_DIR}/filteredBams/"*.bam "${OUTPUT_DIR}/filteredBams/"*.bai 2>/dev/null || true
-[[ "${KEEP_NORMALIZATION_POLICY_BAMS:-false}" == "false" ]] && \
-    find "${OUTPUT_DIR}/coverage_filtering_policy_bams" -type f \
-        \( -name '*.bam' -o -name '*.bai' \) -delete 2>/dev/null || true
-[[ "${KEEP_SPIKEIN_BAMS:-false}" == "false" ]] && \
-    find "${OUTPUT_DIR}/spikein" -type f \
-        \( -name '*.bam' -o -name '*.bai' \) -delete 2>/dev/null || true
-[[ "${KEEP_RAW_BEDGRAPH:-false}" == "false" ]] && \
-    rm -f "${OUTPUT_DIR}/bedGraph/"*.bedGraph.gz 2>/dev/null || true
+    bash "${SCRIPT_DIR}/cleanup_intermediates.sh" "$OUTPUT_DIR"
 fi
+
+log_event run_complete 14 report "version=${PIPELINE_VERSION}"
 
 echo ""
 echo "=== ATACseq2tracks v${PIPELINE_VERSION} complete ==="

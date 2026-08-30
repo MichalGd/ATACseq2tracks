@@ -86,7 +86,7 @@ grep -q 'ENABLE_AUTOMATIC_CLEANUP:-true' "$ENTRYPOINT" \
     || { echo 'FAIL legacy-config cleanup fallback is not enabled' >&2; exit 1; }
 grep -q '^KEEP_FILTERED_BAMS=true$' "${REPO_DIR}/config/config.conf" \
     || { echo 'FAIL quantitative filtered BAMs are not retained by default' >&2; exit 1; }
-grep -q 'KEEP_FILTERED_BAMS:-true' "$ENTRYPOINT" \
+grep -q 'KEEP_FILTERED_BAMS:-true' "${REPO_DIR}/scripts/cleanup_intermediates.sh" \
     || { echo 'FAIL legacy-config filtered-BAM retention fallback is unsafe' >&2; exit 1; }
 echo 'OK   pair-level TSV/HTML reporting and failure-safe cleanup behavior'
 

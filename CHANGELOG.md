@@ -1,5 +1,18 @@
 # Changelog
 
+## v4.3.0 - 2026-08-30
+
+- Add an activation-free shared `atacseq2tracks --config ...` command.
+- Parse user configuration as literal data and reject executable shell syntax,
+  duplicate keys and unknown settings.
+- Add plan/preflight modes and named stage recovery/stop boundaries.
+- Persist technical-replicate merge maps, resolved settings, resource budgets,
+  software/reference provenance and structured workflow events.
+- Strengthen checkpoint signatures and add JSON checkpoint sidecars.
+- Add report-only regeneration and exact cleanup deletion manifests.
+- Add an atomic versioned shared installer, focused tests and operational docs.
+- Preserve every v4.2.0 scientific method, default and output family.
+
 ## v4.2.0 - 2026-08-20
 
 - Add an opt-in dm6 spike-in coverage family without altering the five v4.1.0

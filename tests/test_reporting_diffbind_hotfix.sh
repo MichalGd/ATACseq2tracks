@@ -24,8 +24,10 @@ grep -q -- '--exclude deeptools' "$REPORT_SH" \
     || { echo 'FAIL incompatible native MultiQC deepTools parser is not excluded' >&2; exit 1; }
 grep -q "ignore_images: false" "$REPORT_SH" \
     || { echo 'FAIL MultiQC custom images are not enabled' >&2; exit 1; }
-grep -q 'Error converting colou?r' "$REPORT_SH" \
-    || { echo 'FAIL MultiQC log audit does not reject colour-conversion errors' >&2; exit 1; }
+grep -q -- '--data-format tsv --export -f' "$REPORT_SH" \
+    || { echo 'FAIL MultiQC static image export is not enabled' >&2; exit 1; }
+grep -q 'known non-fatal RGB-triplet export messages' "$REPORT_SH" \
+    || { echo 'FAIL known MultiQC RGB-triplet export messages are not handled' >&2; exit 1; }
 echo 'OK   MultiQC uses validated static deepTools custom content'
 
 TMP_DIR="$(mktemp -d)"
@@ -105,8 +107,15 @@ while (($#)); do
 done
 mkdir -p "$out_dir"
 printf '<html><body>mock MultiQC</body></html>\n' > "${out_dir}/${report_name}.html"
+mkdir -p "${out_dir}/${report_name}_plots"
+printf 'mock exported PNG\n' > "${out_dir}/${report_name}_plots/general_stats.png"
 if [[ "${MOCK_MULTIQC_FAILURE:-0}" == 1 ]]; then
     echo "Oops! The 'deeptools' MultiQC module broke..."
+elif [[ "${MOCK_MULTIQC_UNKNOWN_COLOUR_FAILURE:-0}" == 1 ]]; then
+    echo "mqc_colour | Error converting color 'not-a-colour' to RGB"
+elif [[ "${MOCK_MULTIQC_RGB_WARNING:-0}" == 1 ]]; then
+    echo "mqc_colour | Error converting color '55,126,184' to RGB: input #55,126,184 is not in #RRGGBB format"
+    echo 'MultiQC complete'
 else
     echo 'MultiQC complete'
 fi
@@ -127,7 +136,21 @@ grep -Fxq -- '--exclude' "$MOCK_MULTIQC_ARGS" \
     || { echo 'FAIL MultiQC exclusion flag was not passed' >&2; exit 1; }
 grep -Fxq 'deeptools' "$MOCK_MULTIQC_ARGS" \
     || { echo 'FAIL native deepTools module was not excluded' >&2; exit 1; }
+grep -Fxq -- '--export' "$MOCK_MULTIQC_ARGS" \
+    || { echo 'FAIL MultiQC exported images were not requested' >&2; exit 1; }
+[[ -s "${REPORT_DIR}/fastq2tracks_unified_$(date +%Y%m%d)_plots/general_stats.png" ]] \
+    || { echo 'FAIL exported MultiQC image was not validated' >&2; exit 1; }
 echo 'OK   report wrapper embeds all available deepTools plots and validates output'
+
+MOCK_MULTIQC_RGB_WARNING=1 bash "$REPORT_SH" "$OUT_DIR" "$REPORT_DIR" html >/dev/null 2>&1 \
+    || { echo 'FAIL known non-fatal MultiQC RGB-triplet message stopped reporting' >&2; exit 1; }
+echo 'OK   known MultiQC RGB-triplet export messages remain non-fatal'
+
+if MOCK_MULTIQC_UNKNOWN_COLOUR_FAILURE=1 bash "$REPORT_SH" "$OUT_DIR" "$REPORT_DIR" html >/dev/null 2>&1; then
+    echo 'FAIL report wrapper accepted an unexpected colour-conversion failure' >&2
+    exit 1
+fi
+echo 'OK   unexpected MultiQC colour-conversion failures remain fatal'
 
 if MOCK_MULTIQC_FAILURE=1 bash "$REPORT_SH" "$OUT_DIR" "$REPORT_DIR" html >/dev/null 2>&1; then
     echo 'FAIL report wrapper accepted a caught MultiQC module failure' >&2

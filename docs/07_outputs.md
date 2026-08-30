@@ -6,6 +6,14 @@
 
 ## Output directory tree
 
+v4.3.0 adds `<OUTPUT_DIR>/metadata/` without changing scientific output paths.
+It contains `validated_sequencing_units.tsv`, `biological_libraries.tsv`,
+`technical_merge_audit.tsv`, `resolved_config.{conf,tsv}`,
+`planned_stages.tsv`, `resource_budget.tsv`, `software_versions.tsv`,
+`reference_manifest.tsv`, `workflow_events.tsv` and, after successful automatic
+cleanup, `cleanup_manifest.tsv`. Checkpoints now also have JSON metadata
+sidecars alongside their compatible `.done` files.
+
 > Track naming: CPM tracks use `_CPM.{bw,bedGraph}`. Consensus-scaled files use `_DESeq2Consensus.{bw,bedGraph}`. Robust filtering-policy tracks are stored under `bigwig_deseq2_robust_cpm/<permissive|intermediate|stringent>/` with the policy in the suffix. The legacy `_DESeq2RobustCPM.{bw,bedGraph}` stringent alias is retained for compatibility. Optional dm6-calibrated tracks use `_SpikeInDM6_Stringent.{bw,bedGraph}`.
 
 ```

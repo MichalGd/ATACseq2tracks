@@ -6,6 +6,16 @@
 
 ## Conda environment
 
+### Shared installation (recommended for server users)
+
+Administrators maintain the environments and publish `/usr/local/bin/atacseq2tracks`.
+Ordinary users verify it with `atacseq2tracks --version` and do not activate
+Conda. The launcher selects the managed main and ataqv environments. See
+[Operations and recovery](17_operations_and_recovery.md).
+
+The commands below create a private/local installation and are not required for
+users of the shared command.
+
 The conda environment file `environment.yml` installs all command-line dependencies.
 
 ```bash
