@@ -1,5 +1,20 @@
 # Changelog
 
+## v4.3.2 - 2026-08-31
+
+- Resolve the activation-free launcher location through external symbolic links.
+- Add a regression test that invokes the launcher through a temporary command
+  symlink, matching the shared `/usr/local/bin/atacseq2tracks` installation.
+- Retain the v4.3.1 DESeq2ATAC self-test fix and all scientific behavior.
+
+## v4.3.1 - 2026-08-31
+
+- Fix the DESeq2ATAC synthetic self-test so lower-bound correction preserves
+  matrix dimensions under base R.
+- Use mirrored condition columns for the no-effect synthetic model, making its
+  expected zero-significant result deterministic.
+- Change no production analysis, normalization, filtering, output or default.
+
 ## v4.3.0 - 2026-08-30
 
 - Add an activation-free shared `atacseq2tracks --config ...` command.

@@ -1,4 +1,4 @@
-ATACseq2tracks v4.3.0 configuration directory
+ATACseq2tracks v4.3.2 configuration directory
 
 For the shared installation, copy config.conf into a user-owned project folder,
 set SAMPLESHEET and OUTPUT_DIR plus server references, then run:

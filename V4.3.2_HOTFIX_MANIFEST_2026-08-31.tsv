@@ -1,0 +1,13 @@
+path	status	purpose
+VERSION	modified	Release version 4.3.2
+bin/atacseq2tracks	modified	Resolve the physical launcher target through external symlinks
+tests/test_v4_3_0_operational.sh	modified	Exercise the launcher through an external command symlink
+tests/test_v4_1_0_coverage_policies.sh	modified	Accept v4.3.2 as preserving the coverage-policy contract
+README.md	modified	Current release and launcher-hotfix scope
+CHANGELOG.md	modified	Hotfix release notes
+docs/README.md	modified	Current release and hotfix-document link
+config/README.txt	modified	Current configuration release label
+scripts/validate_samplesheet.py	modified	Current schema display label
+docs/v4.3.2_LAUNCHER_SYMLINK_HOTFIX_2026-08-31.md	added	Cause, correction and compatibility
+APPLY_V4.3.2_LAUNCHER_SYMLINK_HOTFIX_2026-08-31.md	added	Shared installation and verification
+V4.3.2_HOTFIX_MANIFEST_2026-08-31.tsv	added	Focused change inventory

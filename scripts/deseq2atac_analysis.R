@@ -165,9 +165,13 @@ plot_matrix <- function(matrix, title, palette) {
 run_synthetic_self_test <- function() {
     set.seed(320)
     n <- 400L
-    no_effect <- matrix(rnbinom(n * 4L, mu = 120, size = 15), nrow = n)
-    no_effect <- pmax(1L, no_effect)
-    colnames(no_effect) <- c("A1", "A2", "B1", "B2")
+    baseline <- matrix(rnbinom(n * 2L, mu = 120, size = 15), nrow = n)
+    baseline[baseline < 1L] <- 1L
+    no_effect <- cbind(
+        A1 = baseline[, 1L], A2 = baseline[, 2L],
+        B1 = baseline[, 1L], B2 = baseline[, 2L]
+    )
+    stopifnot(is.matrix(no_effect), identical(dim(no_effect), c(n, 4L)))
     metadata <- data.frame(condition = factor(c("A", "A", "B", "B"), levels = c("A", "B")))
     rownames(metadata) <- colnames(no_effect)
 

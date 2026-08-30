@@ -1,6 +1,6 @@
-# ATACseq2tracks 4.3.0
+# ATACseq2tracks 4.3.2
 
-ATACseq2tracks is a samplesheet-driven Bash workflow for bulk ATAC-seq and related chromatin-profiling assays. Version 4.3.0 is an operational update to v4.2.0: it adds an activation-free shared launcher, safe configuration parsing, explicit plan/preflight modes, named recovery, persistent technical-replicate and provenance metadata, report-only regeneration and audited cleanup. The v4.2.0 scientific methods and outputs are unchanged. It retains the Bash architecture; it does not introduce Nextflow or Snakemake.
+ATACseq2tracks is a samplesheet-driven Bash workflow for bulk ATAC-seq and related chromatin-profiling assays. Version 4.3.2 is a focused launcher hotfix for v4.3.1: it makes the activation-free command resolve its installed release correctly when invoked through `/usr/local/bin/atacseq2tracks`. It retains the v4.3.1 DESeq2ATAC self-test correction and changes no scientific method, default or output. The v4.3.0 operational features include safe configuration parsing, plan/preflight modes, named recovery, persistent technical-replicate and provenance metadata, report-only regeneration and audited cleanup.
 
 > The inherited dm6 spike-in family remains off by default and requires representative paired-end and single-end server validation before biological interpretation. See the [v4.3.0 operational update](docs/v4.3.0_OPERATIONAL_UPDATE_2026-08-30.md) and [v4.2.0 spike-in note](docs/v4.2.0_DROSOPHILA_SPIKEIN_UPDATE_2026-08-20.md).
 
